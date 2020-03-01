@@ -526,12 +526,16 @@ func spinUpFakeForge(t *testing.T, metadataFile string) *httptest.Server {
 	// spin up HTTP test server to serve fake/invalid Forge module metadata
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v3/releases/puppetlabs-ntp-6.0.0" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
 			body, err := ioutil.ReadFile(metadataFile)
 			if err != nil {
 				t.Error(err)
 			}
 			fmt.Fprint(w, string(body))
 		} else if r.URL.Path == "/v3/modules/puppetlabs-ntp" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
 			body, err := ioutil.ReadFile("tests/fake-forge/latest-puppetlabs-ntp-metadata.json")
 			if err != nil {
 				t.Error(err)

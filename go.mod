@@ -3,8 +3,11 @@ module github.com/xorpaul/g10k
 go 1.13
 
 require (
+	github.com/TheMeier/puppetforgeclient v0.0.0-20200301094509-981615bdd4ab
+	github.com/antihax/optional v1.0.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/fatih/color v1.7.1-0.20180516100307-2d684516a886
+	github.com/golang/protobuf v1.3.4 // indirect
 	github.com/gosuri/uilive v0.0.3
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/henvic/uilive v0.0.0-20170601211230-dc7a6ced9df3
@@ -21,6 +24,10 @@ require (
 	github.com/tidwall/match v1.0.1
 	github.com/xorpaul/uiprogress v0.0.0-20170224063937-d0567a9d84a1
 	golang.org/x/crypto v0.0.0-20191128160524-b544559bb6d1
+	golang.org/x/net v0.0.0-20200301022130-244492dfa37a // indirect
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 	golang.org/x/sys v0.0.0-20191128015809-6d18c012aee9
+	golang.org/x/tools/gopls v0.3.2 // indirect
+	google.golang.org/appengine v1.6.5 // indirect
 	gopkg.in/yaml.v2 v2.2.7
 )

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,12 +18,33 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/TheMeier/puppetforgeclient"
+	"github.com/antihax/optional"
 	"github.com/fatih/color"
 	"github.com/klauspost/pgzip"
 	"github.com/tidwall/gjson"
 	"github.com/xorpaul/uiprogress"
 )
 
+func getForgeClient(fm ForgeModule) (*puppetforgeclient.APIClient, context.Context) {
+	var ctx context.Context
+	baseURL := config.Forge.Baseurl
+	if len(fm.baseURL) > 0 {
+		baseURL = fm.baseURL
+	}
+	req, err := http.NewRequest("GET", baseURL, nil)
+	if err != nil {
+		Fatalf("queryForgeAPI(): Error creating GET request for Puppetlabs forge API" + err.Error())
+	}
+	proxyURL, err := http.ProxyFromEnvironment(req)
+	forgeClientConfig := puppetforgeclient.NewConfiguration()
+	forgeClientConfig.AddDefaultHeader("Connection", "keep-alive")
+	forgeClientConfig.UserAgent = "https://github.com/xorpaul/g10k/"
+	forgeClientConfig.BasePath = baseURL
+	forgeClientConfig.HTTPClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+	forgeClient := puppetforgeclient.NewAPIClient(forgeClientConfig)
+	return forgeClient, ctx
+}
 func checkDeprecation(fm ForgeModule, lastCheckedFile string) bool {
 	// check content of lastCheckedFile (which should be the Forge API response body) if the module is deprecated
 	// return false if the api needs to be queried again
@@ -165,68 +188,37 @@ func doModuleInstallOrNothing(fm ForgeModule) {
 }
 
 func queryForgeAPI(fm ForgeModule) ForgeResult {
-	baseURL := config.Forge.Baseurl
-	if len(fm.baseURL) > 0 {
-		baseURL = fm.baseURL
+	forgeClient, ctx := getForgeClient(fm)
+	getModuleOpts := &puppetforgeclient.GetModuleOpts{
+		WithHtml: optional.NewBool(false),
 	}
-	url := baseURL + "/v3/modules/" + fm.author + "-" + fm.name + "?exclude_fields=changelog+readme+license+releases"
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		Fatalf("queryForgeAPI(): Error creating GET request for Puppetlabs forge API" + err.Error())
-	}
-	req.Header.Set("User-Agent", "https://github.com/xorpaul/g10k/")
-	req.Header.Set("Connection", "keep-alive")
-
-	proxyURL, err := http.ProxyFromEnvironment(req)
-	if err != nil {
-		Fatalf("queryForgeAPI(): Error while getting http proxy with golang http.ProxyFromEnvironment()" + err.Error())
-	}
-	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 	before := time.Now()
-	resp, err := client.Do(req)
+	module, _, err := forgeClient.ModuleOperationsApi.GetModule(ctx, fm.author+"-"+fm.name, getModuleOpts)
+
 	if err != nil {
 		if config.UseCacheFallback {
 			Warnf("Forge API error, trying to use cache for module " + fm.author + "/" + fm.author + "-" + fm.name)
 			_ = getLatestCachedModule(fm)
 			return ForgeResult{false, "", "", 0}
 		}
-		Fatalf("queryForgeAPI(): Error while issuing the HTTP request to " + url + " Error: " + err.Error())
+		Fatalf("queryForgeAPI(): " + err.Error())
 	}
 	duration := time.Since(before).Seconds()
-	Verbosef("Querying Forge API " + url + " took " + strconv.FormatFloat(duration, 'f', 5, 64) + "s")
+	Verbosef("Querying Forge API for + took " + fm.author + "/" + fm.author + strconv.FormatFloat(duration, 'f', 5, 64) + "s")
 
 	mutex.Lock()
 	syncForgeTime += duration
 	mutex.Unlock()
-	defer resp.Body.Close()
 
-	if strings.TrimSpace(resp.Status) == "200 OK" {
-		// need to get latest version
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			Fatalf("queryForgeAPI(): Error while reading response body for Forge module " + fm.name + " from " + url + ": " + err.Error())
-		}
+	lastCheckedFile := filepath.Join(config.ForgeCacheDir, fm.author+"-"+fm.name+"-latest-last-checked")
+	Debugf("writing last-checked file " + lastCheckedFile)
+	f, _ := os.Create(lastCheckedFile)
+	defer f.Close()
+	jsonString, _ := json.Marshal(module)
+	f.Write(jsonString)
 
-		json := string(body)
-		fr := parseForgeAPIResult(json, fm)
+	return ForgeResult{true, module.CurrentRelease.Version, module.CurrentRelease.FileMd5, int64(module.CurrentRelease.FileSize)}
 
-		lastCheckedFile := filepath.Join(config.ForgeCacheDir, fm.author+"-"+fm.name+"-latest-last-checked")
-		Debugf("writing last-checked file " + lastCheckedFile)
-		f, _ := os.Create(lastCheckedFile)
-		defer f.Close()
-		f.WriteString(json)
-
-		return ForgeResult{true, fr.versionNumber, fr.md5sum, fr.fileSize}
-
-	} else if strings.TrimSpace(resp.Status) == "304 Not Modified" {
-		Debugf("Got 304 nothing to do for module " + fm.author + "-" + fm.name)
-		return ForgeResult{false, "", "", 0}
-	} else if strings.TrimSpace(resp.Status) == "404 Not Found" {
-		Fatalf("Received 404 from Forge for module " + fm.author + "-" + fm.name + " using URL " + url + " Does the module really exist and is it correctly named?")
-		return ForgeResult{false, "", "", 0}
-	}
-	Fatalf("Unexpected response code " + resp.Status)
-	return ForgeResult{false, "", "", 0}
 }
 
 // parseForgeAPIResult parses the JSON response of the Forge API
@@ -276,54 +268,22 @@ func parseForgeAPIResult(json string, fm ForgeModule) ForgeResult {
 
 // getMetadataForgeModule queries the configured Puppet Forge and return
 func getMetadataForgeModule(fm ForgeModule) ForgeModule {
-	baseURL := config.Forge.Baseurl
-	if len(fm.baseURL) > 0 {
-		baseURL = fm.baseURL
-	}
-	url := baseURL + "/v3/releases/" + fm.author + "-" + fm.name + "-" + fm.version
-	req, err := http.NewRequest("GET", url, nil)
-	req.Header.Set("User-Agent", "https://github.com/xorpaul/g10k/")
-	req.Header.Set("Connection", "keep-alive")
-	proxyURL, err := http.ProxyFromEnvironment(req)
-	if err != nil {
-		Fatalf("getMetadataForgeModule(): Error while getting http proxy with golang http.ProxyFromEnvironment()" + err.Error())
-	}
-	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+	forgeClient, ctx := getForgeClient(fm)
+
 	before := time.Now()
-	Debugf("GETing " + url)
-	resp, err := client.Do(req)
+	Debugf("GetRelease for " + fm.author + "-" + fm.name)
+	module, _, err := forgeClient.ReleaseOperationsApi.GetRelease(ctx, fm.author+"-"+fm.name+"-"+fm.version, nil)
 	duration := time.Since(before).Seconds()
-	Verbosef("GETing Forge metadata from " + url + " took " + strconv.FormatFloat(duration, 'f', 5, 64) + "s")
+	Verbosef("GETing Forge metadata for " + fm.name + " took " + strconv.FormatFloat(duration, 'f', 5, 64) + "s")
 	mutex.Lock()
 	syncForgeTime += duration
 	mutex.Unlock()
 	if err != nil {
-		Fatalf("getMetadataForgeModule(): Error while querying metadata for Forge module " + fm.name + " from " + url + ": " + err.Error())
+		Fatalf("getMetadataForgeModule(): Error while querying metadata for Forge module " + fm.author + "-" + fm.name + ": " + err.Error())
 	}
-	defer resp.Body.Close()
 
-	if strings.TrimSpace(resp.Status) == "200 OK" {
-		body, err := ioutil.ReadAll(resp.Body)
+	return ForgeModule{md5sum: module.FileMd5, fileSize: int64(module.FileSize)}
 
-		if err != nil {
-			Fatalf("getMetadataForgeModule(): Error while reading response body for Forge module " + fm.name + " from " + url + ": " + err.Error())
-		}
-
-		before := time.Now()
-		currentRelease := gjson.Parse(string(body)).Map()
-		duration := time.Since(before).Seconds()
-		modulemd5sum := currentRelease["file_md5"].String()
-		moduleFilesize := currentRelease["file_size"].Int()
-		Debugf("module: " + fm.author + "/" + fm.name + " modulemd5sum: " + modulemd5sum + " moduleFilesize: " + strconv.FormatInt(moduleFilesize, 10))
-
-		mutex.Lock()
-		forgeJSONParseTime += duration
-		mutex.Unlock()
-
-		return ForgeModule{md5sum: modulemd5sum, fileSize: moduleFilesize}
-	}
-	Fatalf("getMetadataForgeModule(): Unexpected response code while GETing " + url + " " + resp.Status)
-	return ForgeModule{}
 }
 
 func extractForgeModule(wgForgeModule *sync.WaitGroup, file *io.PipeReader, fileName string) {

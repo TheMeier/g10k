@@ -9,3 +9,5 @@ modules/
 tmp/
 .g10k_cache/
 external_modules/
+__debug_bin
+debug.test
