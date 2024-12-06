@@ -12,45 +12,47 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/xorpaul/g10k/internal"
+	"github.com/xorpaul/g10k/pkg/puppetfile"
 )
 
-func equalPuppetfile(a, b Puppetfile) bool {
+func equalPuppetfile(a, b puppetfile.Puppetfile) bool {
 	if &a == &b {
 		return true
 	}
-	if a.forgeBaseURL != b.forgeBaseURL ||
-		a.forgeCacheTTL != b.forgeCacheTTL ||
-		a.privateKey != b.privateKey ||
-		a.controlRepoBranch != b.controlRepoBranch ||
-		a.source != b.source {
+	if a.ForgeBaseURL != b.ForgeBaseURL ||
+		a.ForgeCacheTTL != b.ForgeCacheTTL ||
+		a.PrivateKey != b.PrivateKey ||
+		a.ControlRepoBranch != b.ControlRepoBranch ||
+		a.Source != b.Source {
 		Debugf("forgeBaseURL, forgeCacheTTL, privateKey, controlRepoBranch or source isn't equal!")
 		return false
 	}
 
-	if len(a.gitModules) != len(b.gitModules) ||
-		len(a.forgeModules) != len(b.forgeModules) {
+	if len(a.GitModules) != len(b.GitModules) ||
+		len(a.ForgeModules) != len(b.ForgeModules) {
 		Debugf("size of gitModules or forgeModules isn't equal!")
 		return false
 	}
 
-	for gitModuleName, gm := range a.gitModules {
-		if _, ok := b.gitModules[gitModuleName]; !ok {
+	for gitModuleName, gm := range a.GitModules {
+		if _, ok := b.GitModules[gitModuleName]; !ok {
 			Debugf("git module " + gitModuleName + " missing!")
 			return false
 		}
-		if !equalGitModule(gm, b.gitModules[gitModuleName]) {
+		if !equalGitModule(gm, b.GitModules[gitModuleName]) {
 			Debugf("git module " + gitModuleName + " isn't equal!")
 			return false
 		}
 	}
 
-	for forgeModuleName, fm := range a.forgeModules {
-		if _, ok := b.forgeModules[forgeModuleName]; !ok {
+	for forgeModuleName, fm := range a.ForgeModules {
+		if _, ok := b.ForgeModules[forgeModuleName]; !ok {
 			Debugf("forge module " + forgeModuleName + " missing!")
 			return false
 		}
 		//fmt.Println("checking Forge module: ", forgeModuleName, fm)
-		if !equalForgeModule(fm, b.forgeModules[forgeModuleName]) {
+		if !equalForgeModule(fm, b.ForgeModules[forgeModuleName]) {
 			Debugf("forge module " + forgeModuleName + " isn't equal!")
 			return false
 		}
@@ -70,44 +72,44 @@ func equalForgeResult(a, b ForgeResult) bool {
 	return true
 }
 
-func equalForgeModule(a, b ForgeModule) bool {
+func equalForgeModule(a, b internal.ForgeModule) bool {
 	if &a == &b {
 		return true
 	}
-	if a.author != b.author || a.name != b.name ||
-		a.version != b.version ||
-		a.md5sum != b.md5sum ||
-		a.sha256sum != b.sha256sum ||
-		a.fileSize != b.fileSize ||
-		a.baseURL != b.baseURL ||
-		a.cacheTTL != b.cacheTTL {
+	if a.Author != b.Author || a.Name != b.Name ||
+		a.Version != b.Version ||
+		a.Md5sum != b.Md5sum ||
+		a.Sha256sum != b.Sha256sum ||
+		a.FileSize != b.FileSize ||
+		a.BaseURL != b.BaseURL ||
+		a.CacheTTL != b.CacheTTL {
 		return false
 	}
 	return true
 }
 
-func equalGitModule(a, b GitModule) bool {
+func equalGitModule(a, b internal.GitModule) bool {
 	if &a == &b {
 		return true
 	}
-	if a.git != b.git ||
-		a.privateKey != b.privateKey ||
-		a.branch != b.branch ||
-		a.tag != b.tag ||
-		a.commit != b.commit ||
-		a.ref != b.ref ||
-		a.link != b.link ||
-		a.ignoreUnreachable != b.ignoreUnreachable ||
-		a.installPath != b.installPath ||
-		a.local != b.local ||
-		a.useSSHAgent != b.useSSHAgent {
+	if a.Git != b.Git ||
+		a.PrivateKey != b.PrivateKey ||
+		a.Branch != b.Branch ||
+		a.Tag != b.Tag ||
+		a.Commit != b.Commit ||
+		a.Ref != b.Ref ||
+		a.Link != b.Link ||
+		a.IgnoreUnreachable != b.IgnoreUnreachable ||
+		a.InstallPath != b.InstallPath ||
+		a.Local != b.Local ||
+		a.UseSSHAgent != b.UseSSHAgent {
 		return false
 	}
-	if len(a.fallback) != len(b.fallback) {
+	if len(a.Fallback) != len(b.Fallback) {
 		return false
 	}
-	for i, v := range a.fallback {
-		if b.fallback[i] != v {
+	for i, v := range a.Fallback {
+		if b.Fallback[i] != v {
 			return false
 		}
 	}
@@ -180,22 +182,22 @@ func TestReadPuppetfile(t *testing.T) {
 	fallbackMapAnother[2] = "prelive"
 	fallbackMapAnother[3] = "live"
 
-	gm := make(map[string]GitModule)
-	gm["sensu"] = GitModule{git: "https://github.com/sensu/sensu-puppet.git",
-		commit: "8f4fc5780071c4895dec559eafc6030511b0caaa", ignoreUnreachable: false}
-	gm["example_module"] = GitModule{git: "git@somehost.com/foo/example-module.git",
-		link: true, ignoreUnreachable: false, fallback: fallbackMapExample}
-	gm["another_module"] = GitModule{git: "git@somehost.com/foo/another-module.git",
-		link: true, ignoreUnreachable: false, fallback: fallbackMapAnother}
-	gm["example_module_full"] = GitModule{git: "git@somehost.com/foo/example-module.git",
-		branch: "foo", ignoreUnreachable: true, fallback: fallbackMapExampleFull}
+	gm := make(map[string]internal.GitModule)
+	gm["sensu"] = internal.GitModule{Git: "https://github.com/sensu/sensu-puppet.git",
+		Commit: "8f4fc5780071c4895dec559eafc6030511b0caaa", IgnoreUnreachable: false}
+	gm["example_module"] = internal.GitModule{Git: "git@somehost.com/foo/example-module.git",
+		Link: true, IgnoreUnreachable: false, Fallback: fallbackMapExample}
+	gm["another_module"] = internal.GitModule{Git: "git@somehost.com/foo/another-module.git",
+		Link: true, IgnoreUnreachable: false, Fallback: fallbackMapAnother}
+	gm["example_module_full"] = internal.GitModule{Git: "git@somehost.com/foo/example-module.git",
+		Branch: "foo", IgnoreUnreachable: true, Fallback: fallbackMapExampleFull}
 
-	fm := make(map[string]ForgeModule)
-	fm["apt"] = ForgeModule{version: "2.3.0", author: "puppetlabs", name: "apt"}
-	fm["ntp"] = ForgeModule{version: "present", author: "puppetlabs", name: "ntp"}
-	fm["stdlib"] = ForgeModule{version: "latest", author: "puppetlabs", name: "stdlib"}
+	fm := make(map[string]internal.ForgeModule)
+	fm["apt"] = internal.ForgeModule{Version: "2.3.0", Author: "puppetlabs", Name: "apt"}
+	fm["ntp"] = internal.ForgeModule{Version: "present", Author: "puppetlabs", Name: "ntp"}
+	fm["stdlib"] = internal.ForgeModule{Version: "latest", Author: "puppetlabs", Name: "stdlib"}
 
-	expected := Puppetfile{gitModules: gm, forgeModules: fm, source: "test", forgeCacheTTL: time.Duration(50 * time.Minute), forgeBaseURL: "foobar"}
+	expected := puppetfile.Puppetfile{GitModules: gm, ForgeModules: fm, Source: "test", ForgeCacheTTL: time.Duration(50 * time.Minute), ForgeBaseURL: "foobar"}
 
 	if !equalPuppetfile(got, expected) {
 		spew.Dump(expected)
@@ -214,21 +216,21 @@ func TestFallbackPuppetfile(t *testing.T) {
 	fallbackMapAnother[2] = "prelive"
 	fallbackMapAnother[3] = "live"
 
-	gm := make(map[string]GitModule)
-	gm["example_module"] = GitModule{git: "git@somehost.com/foo/example-module.git",
-		link: true, ignoreUnreachable: false, fallback: fallbackMapExample}
-	gm["another_module"] = GitModule{git: "git@somehost.com/foo/another-module.git",
-		branch: "master", ignoreUnreachable: false, fallback: fallbackMapAnother}
+	gm := make(map[string]internal.GitModule)
+	gm["example_module"] = internal.GitModule{Git: "git@somehost.com/foo/example-module.git",
+		Link: true, IgnoreUnreachable: false, Fallback: fallbackMapExample}
+	gm["another_module"] = internal.GitModule{Git: "git@somehost.com/foo/another-module.git",
+		Branch: "master", IgnoreUnreachable: false, Fallback: fallbackMapAnother}
 
-	expected := Puppetfile{gitModules: gm, source: "test"}
+	expected := puppetfile.Puppetfile{GitModules: gm, Source: "test"}
 	got := readPuppetfile("tests/TestFallbackPuppetfile", "", "test", "test", false, false)
 
-	if !equalGitModule(got.gitModules["example_module"], expected.gitModules["example_module"]) {
-		t.Error("Expected gitModules:", expected.gitModules["example_module"], ", but got gitModules:", got.gitModules["example_module"])
+	if !equalGitModule(got.GitModules["example_module"], expected.GitModules["example_module"]) {
+		t.Error("Expected gitModules:", expected.GitModules["example_module"], ", but got gitModules:", got.GitModules["example_module"])
 	}
 
-	if !equalGitModule(got.gitModules["another_module"], expected.gitModules["another_module"]) {
-		t.Error("Expected gitModules:", expected.gitModules["another_module"], ", but got gitModules:", got.gitModules["another_module"])
+	if !equalGitModule(got.GitModules["another_module"], expected.GitModules["another_module"]) {
+		t.Error("Expected gitModules:", expected.GitModules["another_module"], ", but got gitModules:", got.GitModules["another_module"])
 	}
 }
 
@@ -240,11 +242,11 @@ func TestForgeCacheTTLPuppetfile(t *testing.T) {
 		t.Error("Expected", expected, "got", got)
 	}
 
-	expectedPuppetfile := Puppetfile{forgeCacheTTL: 50 * time.Minute}
+	expectedPuppetfile := puppetfile.Puppetfile{ForgeCacheTTL: 50 * time.Minute}
 	gotPuppetfile := readPuppetfile("tests/TestForgeCacheTTLPuppetfile", "", "test", "test", false, false)
 
-	if gotPuppetfile.forgeCacheTTL != expectedPuppetfile.forgeCacheTTL {
-		t.Error("Expected for forgeCacheTTL", expectedPuppetfile.forgeCacheTTL, "got", gotPuppetfile.forgeCacheTTL)
+	if gotPuppetfile.ForgeCacheTTL != expectedPuppetfile.ForgeCacheTTL {
+		t.Error("Expected for forgeCacheTTL", expectedPuppetfile.ForgeCacheTTL, "got", gotPuppetfile.ForgeCacheTTL)
 	}
 
 }
@@ -317,13 +319,13 @@ func TestReadPuppetfileChecksumAttribute(t *testing.T) {
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
 	got := readPuppetfile("tests/"+funcName, "", "test", "test", false, false)
 
-	fm := make(map[string]ForgeModule)
-	fm["ntp"] = ForgeModule{version: "6.0.0", author: "puppetlabs", name: "ntp", sha256sum: "a988a172a3edde6ac2a26d0e893faa88d37bc47465afc50d55225a036906c944"}
-	fm["stdlib"] = ForgeModule{version: "2.3.0", author: "puppetlabs", name: "stdlib", sha256sum: "433c69fb99a46185e81619fadb70e0961bce2f4e952294a16e61364210d1519d"}
-	fm["apt"] = ForgeModule{version: "2.3.0", author: "puppetlabs", name: "apt", sha256sum: "a09290c207bbfed7f42dd0356ff4dee16e138c7f9758d2134a21aeb66e14072f"}
-	fm["concat"] = ForgeModule{version: "2.2.0", author: "puppetlabs", name: "concat", sha256sum: "ec0407abab71f57e106ade6ed394410d08eec29bdad4c285580e7b56514c5194"}
+	fm := make(map[string]internal.ForgeModule)
+	fm["ntp"] = internal.ForgeModule{Version: "6.0.0", Author: "puppetlabs", Name: "ntp", Sha256sum: "a988a172a3edde6ac2a26d0e893faa88d37bc47465afc50d55225a036906c944"}
+	fm["stdlib"] = internal.ForgeModule{Version: "2.3.0", Author: "puppetlabs", Name: "stdlib", Sha256sum: "433c69fb99a46185e81619fadb70e0961bce2f4e952294a16e61364210d1519d"}
+	fm["apt"] = internal.ForgeModule{Version: "2.3.0", Author: "puppetlabs", Name: "apt", Sha256sum: "a09290c207bbfed7f42dd0356ff4dee16e138c7f9758d2134a21aeb66e14072f"}
+	fm["concat"] = internal.ForgeModule{Version: "2.2.0", Author: "puppetlabs", Name: "concat", Sha256sum: "ec0407abab71f57e106ade6ed394410d08eec29bdad4c285580e7b56514c5194"}
 
-	expected := Puppetfile{forgeModules: fm, source: "test"}
+	expected := puppetfile.Puppetfile{ForgeModules: fm, Source: "test"}
 
 	if !equalPuppetfile(got, expected) {
 		spew.Dump(expected)
@@ -336,9 +338,9 @@ func TestReadPuppetfileForgeSlashNotation(t *testing.T) {
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
 
 	got := readPuppetfile("tests/"+funcName, "", "test", "test", false, false)
-	fm := make(map[string]ForgeModule)
-	fm["filebeat"] = ForgeModule{version: "0.10.4", author: "pcfens", name: "filebeat"}
-	expected := Puppetfile{forgeModules: fm, source: "test"}
+	fm := make(map[string]internal.ForgeModule)
+	fm["filebeat"] = internal.ForgeModule{Version: "0.10.4", Author: "pcfens", Name: "filebeat"}
+	expected := puppetfile.Puppetfile{ForgeModules: fm, Source: "test"}
 	if !equalPuppetfile(got, expected) {
 		spew.Dump(expected)
 		spew.Dump(got)
@@ -351,10 +353,10 @@ func TestReadPuppetfileForgeDash(t *testing.T) {
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
 	got := readPuppetfile("tests/"+funcName, "", "test", "test", false, false)
 
-	fm := make(map[string]ForgeModule)
-	fm["php"] = ForgeModule{version: "4.0.0-beta1", author: "mayflower", name: "php"}
+	fm := make(map[string]internal.ForgeModule)
+	fm["php"] = internal.ForgeModule{Version: "4.0.0-beta1", Author: "mayflower", Name: "php"}
 
-	expected := Puppetfile{forgeModules: fm, source: "test"}
+	expected := puppetfile.Puppetfile{ForgeModules: fm, Source: "test"}
 
 	if !equalPuppetfile(got, expected) {
 		spew.Dump(expected)
@@ -368,10 +370,10 @@ func TestReadPuppetfileInstallPath(t *testing.T) {
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
 	got := readPuppetfile("tests/"+funcName, "", "test", "test", false, false)
 
-	gm := make(map[string]GitModule)
-	gm["sensu"] = GitModule{git: "https://github.com/sensu/sensu-puppet.git", commit: "8f4fc5780071c4895dec559eafc6030511b0caaa", installPath: "external"}
+	gm := make(map[string]internal.GitModule)
+	gm["sensu"] = internal.GitModule{Git: "https://github.com/sensu/sensu-puppet.git", Commit: "8f4fc5780071c4895dec559eafc6030511b0caaa", InstallPath: "external"}
 
-	expected := Puppetfile{gitModules: gm, source: "test"}
+	expected := puppetfile.Puppetfile{GitModules: gm, Source: "test"}
 	//fmt.Println(got)
 
 	if !equalPuppetfile(got, expected) {
@@ -386,13 +388,13 @@ func TestReadPuppetfileLocalModule(t *testing.T) {
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
 	got := readPuppetfile("tests/"+funcName, "", "test", "test", false, false)
 
-	gm := make(map[string]GitModule)
-	gm["localstuff"] = GitModule{local: true}
-	gm["localstuff2"] = GitModule{local: true}
-	gm["localstuff3"] = GitModule{local: false}
-	gm["external"] = GitModule{local: true, installPath: "modules"}
+	gm := make(map[string]internal.GitModule)
+	gm["localstuff"] = internal.GitModule{Local: true}
+	gm["localstuff2"] = internal.GitModule{Local: true}
+	gm["localstuff3"] = internal.GitModule{Local: false}
+	gm["external"] = internal.GitModule{Local: true, InstallPath: "modules"}
 
-	expected := Puppetfile{source: "test", gitModules: gm}
+	expected := puppetfile.Puppetfile{Source: "test", GitModules: gm}
 	//fmt.Println(got)
 
 	if !equalPuppetfile(got, expected) {
@@ -415,10 +417,10 @@ func TestReadPuppetfileForgeNotationGitModule(t *testing.T) {
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
 	got := readPuppetfile("tests/"+funcName, "", "test", "test", false, false)
 
-	gm := make(map[string]GitModule)
-	gm["elasticsearch"] = GitModule{git: "https://github.com/elastic/puppet-elasticsearch.git", branch: "5.x"}
+	gm := make(map[string]internal.GitModule)
+	gm["elasticsearch"] = internal.GitModule{Git: "https://github.com/elastic/puppet-elasticsearch.git", Branch: "5.x"}
 
-	expected := Puppetfile{source: "test", gitModules: gm}
+	expected := puppetfile.Puppetfile{Source: "test", GitModules: gm}
 	//fmt.Println(got)
 
 	if !equalPuppetfile(got, expected) {
@@ -433,17 +435,17 @@ func TestReadPuppetfileGitSlashNotation(t *testing.T) {
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
 	got := readPuppetfile("tests/"+funcName, "", "test", "test", false, false)
 
-	fm := make(map[string]ForgeModule)
-	fm["stdlib"] = ForgeModule{version: "present", author: "puppetlabs", name: "stdlib"}
-	fm["apache"] = ForgeModule{version: "present", author: "puppetlabs", name: "apache"}
-	fm["apt"] = ForgeModule{version: "latest", author: "puppetlabs", name: "apt"}
-	fm["rsync"] = ForgeModule{version: "latest", author: "puppetlabs", name: "rsync"}
+	fm := make(map[string]internal.ForgeModule)
+	fm["stdlib"] = internal.ForgeModule{Version: "present", Author: "puppetlabs", Name: "stdlib"}
+	fm["apache"] = internal.ForgeModule{Version: "present", Author: "puppetlabs", Name: "apache"}
+	fm["apt"] = internal.ForgeModule{Version: "latest", Author: "puppetlabs", Name: "apt"}
+	fm["rsync"] = internal.ForgeModule{Version: "latest", Author: "puppetlabs", Name: "rsync"}
 
-	gm := make(map[string]GitModule)
-	gm["puppetboard"] = GitModule{git: "https://github.com/nibalizer/puppet-module-puppetboard.git", ref: "2.7.1"}
-	gm["elasticsearch"] = GitModule{git: "https://github.com/alexharv074/puppet-elasticsearch.git", ref: "alex_master"}
+	gm := make(map[string]internal.GitModule)
+	gm["puppetboard"] = internal.GitModule{Git: "https://github.com/nibalizer/puppet-module-puppetboard.git", Ref: "2.7.1"}
+	gm["elasticsearch"] = internal.GitModule{Git: "https://github.com/alexharv074/puppet-elasticsearch.git", Ref: "alex_master"}
 
-	expected := Puppetfile{source: "test", gitModules: gm, forgeModules: fm}
+	expected := puppetfile.Puppetfile{Source: "test", GitModules: gm, ForgeModules: fm}
 	//fmt.Println(got)
 
 	if !equalPuppetfile(got, expected) {
@@ -458,17 +460,17 @@ func TestReadPuppetfileGitDashNotation(t *testing.T) {
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
 	got := readPuppetfile("tests/"+funcName, "", "test", "test", false, false)
 
-	fm := make(map[string]ForgeModule)
-	fm["stdlib"] = ForgeModule{version: "present", author: "puppetlabs", name: "stdlib"}
-	fm["apache"] = ForgeModule{version: "present", author: "puppetlabs", name: "apache"}
-	fm["apt"] = ForgeModule{version: "latest", author: "puppetlabs", name: "apt"}
-	fm["rsync"] = ForgeModule{version: "latest", author: "puppetlabs", name: "rsync"}
+	fm := make(map[string]internal.ForgeModule)
+	fm["stdlib"] = internal.ForgeModule{Version: "present", Author: "puppetlabs", Name: "stdlib"}
+	fm["apache"] = internal.ForgeModule{Version: "present", Author: "puppetlabs", Name: "apache"}
+	fm["apt"] = internal.ForgeModule{Version: "latest", Author: "puppetlabs", Name: "apt"}
+	fm["rsync"] = internal.ForgeModule{Version: "latest", Author: "puppetlabs", Name: "rsync"}
 
-	gm := make(map[string]GitModule)
-	gm["puppetboard"] = GitModule{git: "https://github.com/nibalizer/puppet-module-puppetboard.git", ref: "2.7.1"}
-	gm["elasticsearch"] = GitModule{git: "https://github.com/alexharv074/puppet-elasticsearch.git", ref: "alex_master"}
+	gm := make(map[string]internal.GitModule)
+	gm["puppetboard"] = internal.GitModule{Git: "https://github.com/nibalizer/puppet-module-puppetboard.git", Ref: "2.7.1"}
+	gm["elasticsearch"] = internal.GitModule{Git: "https://github.com/alexharv074/puppet-elasticsearch.git", Ref: "alex_master"}
 
-	expected := Puppetfile{source: "test", gitModules: gm, forgeModules: fm}
+	expected := puppetfile.Puppetfile{Source: "test", GitModules: gm, ForgeModules: fm}
 	//fmt.Println(got)
 
 	if !equalPuppetfile(got, expected) {
@@ -483,17 +485,17 @@ func TestReadPuppetfileGitDashNSlashNotation(t *testing.T) {
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
 	got := readPuppetfile("tests/"+funcName, "", "test", "test", false, false)
 
-	fm := make(map[string]ForgeModule)
-	fm["stdlib"] = ForgeModule{version: "present", author: "puppetlabs", name: "stdlib"}
-	fm["apache"] = ForgeModule{version: "present", author: "puppetlabs", name: "apache"}
-	fm["apt"] = ForgeModule{version: "latest", author: "puppetlabs", name: "apt"}
-	fm["rsync"] = ForgeModule{version: "latest", author: "puppetlabs", name: "rsync"}
+	fm := make(map[string]internal.ForgeModule)
+	fm["stdlib"] = internal.ForgeModule{Version: "present", Author: "puppetlabs", Name: "stdlib"}
+	fm["apache"] = internal.ForgeModule{Version: "present", Author: "puppetlabs", Name: "apache"}
+	fm["apt"] = internal.ForgeModule{Version: "latest", Author: "puppetlabs", Name: "apt"}
+	fm["rsync"] = internal.ForgeModule{Version: "latest", Author: "puppetlabs", Name: "rsync"}
 
-	gm := make(map[string]GitModule)
-	gm["puppetboard"] = GitModule{git: "https://github.com/nibalizer/puppet-module-puppetboard.git", ref: "2.7.1"}
-	gm["elasticsearch"] = GitModule{git: "https://github.com/alexharv074/puppet-elasticsearch.git", ref: "alex_master"}
+	gm := make(map[string]internal.GitModule)
+	gm["puppetboard"] = internal.GitModule{Git: "https://github.com/nibalizer/puppet-module-puppetboard.git", Ref: "2.7.1"}
+	gm["elasticsearch"] = internal.GitModule{Git: "https://github.com/alexharv074/puppet-elasticsearch.git", Ref: "alex_master"}
 
-	expected := Puppetfile{source: "test", gitModules: gm, forgeModules: fm}
+	expected := puppetfile.Puppetfile{Source: "test", GitModules: gm, ForgeModules: fm}
 	//fmt.Println(got)
 
 	if !equalPuppetfile(got, expected) {
@@ -508,11 +510,11 @@ func TestReadPuppetfileSSHKeyAlreadyLoaded(t *testing.T) {
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
 	got := readPuppetfile("tests/"+funcName, "", "test", "test", false, false)
 
-	fm := make(map[string]ForgeModule)
-	gm := make(map[string]GitModule)
-	gm["example_module"] = GitModule{git: "git@somehost.com/foo/example-module.git", branch: "foo", useSSHAgent: true}
+	fm := make(map[string]internal.ForgeModule)
+	gm := make(map[string]internal.GitModule)
+	gm["example_module"] = internal.GitModule{Git: "git@somehost.com/foo/example-module.git", Branch: "foo", UseSSHAgent: true}
 
-	expected := Puppetfile{source: "test", gitModules: gm, forgeModules: fm}
+	expected := puppetfile.Puppetfile{Source: "test", GitModules: gm, ForgeModules: fm}
 	//fmt.Println(got)
 
 	if !equalPuppetfile(got, expected) {

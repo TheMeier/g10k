@@ -19,17 +19,18 @@ import (
 	"github.com/fatih/color"
 	"github.com/klauspost/pgzip"
 	"github.com/tidwall/gjson"
+	"github.com/xorpaul/g10k/internal"
 	"github.com/xorpaul/uiprogress"
 )
 
-func checkDeprecation(fm ForgeModule, lastCheckedFile string) bool {
+func checkDeprecation(fm internal.ForgeModule, lastCheckedFile string) bool {
 	// check content of lastCheckedFile (which should be the Forge API response body) if the module is deprecated
 	// return false if the api needs to be queried again
 	if fileInfo, err := os.Stat(lastCheckedFile); err == nil {
 		if fileInfo.Size() < 1 {
 			Debugf("found empty file " + lastCheckedFile)
 			return false
-		} else if fm.cacheTTL > 0 && fileInfo.ModTime().Add(fm.cacheTTL).Before(time.Now()) {
+		} else if fm.CacheTTL > 0 && fileInfo.ModTime().Add(fm.CacheTTL).Before(time.Now()) {
 			return false
 		} else {
 			json, err := ioutil.ReadFile(lastCheckedFile)
@@ -43,12 +44,12 @@ func checkDeprecation(fm ForgeModule, lastCheckedFile string) bool {
 	return false
 }
 
-func doModuleInstallOrNothing(fm ForgeModule) {
-	moduleName := fm.author + "-" + fm.name
-	moduleVersion := fm.version
-	workDir := filepath.Join(config.ForgeCacheDir, moduleName+"-"+fm.version)
+func doModuleInstallOrNothing(fm internal.ForgeModule) {
+	moduleName := fm.Author + "-" + fm.Name
+	moduleVersion := fm.Version
+	workDir := filepath.Join(config.ForgeCacheDir, moduleName+"-"+fm.Version)
 	lastCheckedFile := filepath.Join(config.ForgeCacheDir, moduleName+"-latest-last-checked")
-	fr := ForgeResult{false, fm.version, "", 0}
+	fr := ForgeResult{false, fm.Version, "", 0}
 	if check4update {
 		moduleVersion = "latest"
 	}
@@ -77,16 +78,16 @@ func doModuleInstallOrNothing(fm ForgeModule) {
 				}
 			}
 		} else {
-			if fm.cacheTTL > 0 {
+			if fm.CacheTTL > 0 {
 				//Debugf("checking for " + lastCheckedFile)
 				if fileInfo, err := os.Lstat(lastCheckedFile); err == nil {
 					//Debugf("found " + lastCheckedFile + " with mTime " + fileInfo.ModTime().String())
-					if fileInfo.ModTime().Add(fm.cacheTTL).After(time.Now()) {
-						Debugf("No need to check forge API if latest version of module " + moduleName + " has been updated, because last-checked file " + lastCheckedFile + " is not older than " + fm.cacheTTL.String())
+					if fileInfo.ModTime().Add(fm.CacheTTL).After(time.Now()) {
+						Debugf("No need to check forge API if latest version of module " + moduleName + " has been updated, because last-checked file " + lastCheckedFile + " is not older than " + fm.CacheTTL.String())
 						// need to add the current (cached!) -latest version number to the latestForgeModules, because otherwise we would always sync this module, because 1.4.1 != -latest
 						me := readModuleMetadata(workDir + "/metadata.json")
 						latestForgeModules.Lock()
-						latestForgeModules.m[moduleName] = me.version
+						latestForgeModules.m[moduleName] = me.Version
 						latestForgeModules.Unlock()
 
 						if checkDeprecation(fm, lastCheckedFile) {
@@ -110,15 +111,15 @@ func doModuleInstallOrNothing(fm ForgeModule) {
 		latestDir := filepath.Join(config.ForgeCacheDir, moduleName+"-latest")
 		if !isDir(latestDir) {
 			if _, ok := uniqueForgeModules[moduleName+"-latest"]; ok {
-				Debugf("we got " + fm.author + "-" + fm.name + "-" + fm.version + ", but no " + latestDir + " to use, but -latest is already being fetched.")
+				Debugf("we got " + fm.Author + "-" + fm.Name + "-" + fm.Version + ", but no " + latestDir + " to use, but -latest is already being fetched.")
 				return
 			}
-			Debugf("we got " + fm.author + "-" + fm.name + "-" + fm.version + ", but no " + latestDir + " to use. Getting -latest")
-			fm.version = "latest"
+			Debugf("we got " + fm.Author + "-" + fm.Name + "-" + fm.Version + ", but no " + latestDir + " to use. Getting -latest")
+			fm.Version = "latest"
 			doModuleInstallOrNothing(fm)
 			return
 		}
-		Debugf("Nothing to do for module " + fm.author + "-" + fm.name + "-" + fm.version + ", because " + latestDir + " exists")
+		Debugf("Nothing to do for module " + fm.Author + "-" + fm.Name + "-" + fm.Version + ", because " + latestDir + " exists")
 	} else {
 		if !isDir(workDir) {
 			_ = queryForgeAPI(fm)
@@ -135,7 +136,7 @@ func doModuleInstallOrNothing(fm ForgeModule) {
 	//log.Println("fr.needToGet for ", m, fr.needToGet)
 
 	if fr.needToGet {
-		if fm.version != "latest" {
+		if fm.Version != "latest" {
 			Debugf("Trying to remove: " + workDir)
 			_ = os.Remove(workDir)
 		} else {
@@ -164,12 +165,12 @@ func doModuleInstallOrNothing(fm ForgeModule) {
 
 }
 
-func queryForgeAPI(fm ForgeModule) ForgeResult {
+func queryForgeAPI(fm internal.ForgeModule) ForgeResult {
 	baseURL := config.ForgeBaseURL
-	if len(fm.baseURL) > 0 {
-		baseURL = fm.baseURL
+	if len(fm.BaseURL) > 0 {
+		baseURL = fm.BaseURL
 	}
-	url := baseURL + "/v3/modules/" + fm.author + "-" + fm.name + "?exclude_fields=changelog+readme+license+releases"
+	url := baseURL + "/v3/modules/" + fm.Author + "-" + fm.Name + "?exclude_fields=changelog+readme+license+releases"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		Fatalf("queryForgeAPI(): Error creating GET request for Puppetlabs forge API" + err.Error())
@@ -186,7 +187,7 @@ func queryForgeAPI(fm ForgeModule) ForgeResult {
 	resp, err := client.Do(req)
 	if err != nil {
 		if config.UseCacheFallback {
-			Warnf("Forge API error, trying to use cache for module " + fm.author + "/" + fm.author + "-" + fm.name)
+			Warnf("Forge API error, trying to use cache for module " + fm.Author + "/" + fm.Author + "-" + fm.Name)
 			_ = getLatestCachedModule(fm)
 			return ForgeResult{false, "", "", 0}
 		}
@@ -204,13 +205,13 @@ func queryForgeAPI(fm ForgeModule) ForgeResult {
 		// need to get latest version
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			Fatalf("queryForgeAPI(): Error while reading response body for Forge module " + fm.name + " from " + url + ": " + err.Error())
+			Fatalf("queryForgeAPI(): Error while reading response body for Forge module " + fm.Name + " from " + url + ": " + err.Error())
 		}
 
 		json := string(body)
 		fr := parseForgeAPIResult(json, fm)
 
-		lastCheckedFile := filepath.Join(config.ForgeCacheDir, fm.author+"-"+fm.name+"-latest-last-checked")
+		lastCheckedFile := filepath.Join(config.ForgeCacheDir, fm.Author+"-"+fm.Name+"-latest-last-checked")
 		Debugf("writing last-checked file " + lastCheckedFile)
 		f, _ := os.Create(lastCheckedFile)
 		defer f.Close()
@@ -219,10 +220,10 @@ func queryForgeAPI(fm ForgeModule) ForgeResult {
 		return ForgeResult{true, fr.versionNumber, fr.md5sum, fr.fileSize}
 
 	} else if resp.StatusCode == http.StatusNotModified {
-		Debugf("Got 304 nothing to do for module " + fm.author + "-" + fm.name)
+		Debugf("Got 304 nothing to do for module " + fm.Author + "-" + fm.Name)
 		return ForgeResult{false, "", "", 0}
 	} else if resp.StatusCode == http.StatusNotFound {
-		Fatalf("Received 404 from Forge for module " + fm.author + "-" + fm.name + " using URL " + url + " Does the module really exist and is it correctly named?")
+		Fatalf("Received 404 from Forge for module " + fm.Author + "-" + fm.Name + " using URL " + url + " Does the module really exist and is it correctly named?")
 		return ForgeResult{false, "", "", 0}
 	}
 	Fatalf("Unexpected response code " + resp.Status)
@@ -230,7 +231,7 @@ func queryForgeAPI(fm ForgeModule) ForgeResult {
 }
 
 // parseForgeAPIResult parses the JSON response of the Forge API
-func parseForgeAPIResult(json string, fm ForgeModule) ForgeResult {
+func parseForgeAPIResult(json string, fm internal.ForgeModule) ForgeResult {
 
 	before := time.Now()
 	currentRelease := gjson.Get(json, "current_release").Map()
@@ -254,33 +255,33 @@ func parseForgeAPIResult(json string, fm ForgeModule) ForgeResult {
 		// check the verbosity level
 		// otherwise these warnings mess up the progress bars
 		if info || debug {
-			Warnf("WARN: Forge module " + fm.author + "-" + fm.name + " has been deprecated by its author since " + deprecatedTimestamp.String() + supersededText)
+			Warnf("WARN: Forge module " + fm.Author + "-" + fm.Name + " has been deprecated by its author since " + deprecatedTimestamp.String() + supersededText)
 		} else {
 			mutex.Lock()
-			forgeModuleDeprecationNotice += "WARN: Forge module " + fm.author + "-" + fm.name + " has been deprecated by its author since " + deprecatedTimestamp.String() + supersededText + "\n"
+			forgeModuleDeprecationNotice += "WARN: Forge module " + fm.Author + "-" + fm.Name + " has been deprecated by its author since " + deprecatedTimestamp.String() + supersededText + "\n"
 			mutex.Unlock()
 		}
 	}
 
 	if len(version) < 1 {
-		Fatalf("ERROR: could not determine version of module " + fm.author + "/" + fm.name)
+		Fatalf("ERROR: could not determine version of module " + fm.Author + "/" + fm.Name)
 	}
 
-	Debugf("found version " + version + " for " + fm.name + "-latest")
+	Debugf("found version " + version + " for " + fm.Name + "-latest")
 	latestForgeModules.Lock()
-	latestForgeModules.m[fm.author+"-"+fm.name] = version
+	latestForgeModules.m[fm.Author+"-"+fm.Name] = version
 	latestForgeModules.Unlock()
 
 	return ForgeResult{true, version, modulemd5sum, moduleFilesize}
 }
 
 // getMetadataForgeModule queries the configured Puppet Forge and return
-func getMetadataForgeModule(fm ForgeModule) ForgeModule {
+func getMetadataForgeModule(fm internal.ForgeModule) internal.ForgeModule {
 	baseURL := config.ForgeBaseURL
-	if len(fm.baseURL) > 0 {
-		baseURL = fm.baseURL
+	if len(fm.BaseURL) > 0 {
+		baseURL = fm.BaseURL
 	}
-	url := baseURL + "/v3/releases/" + fm.author + "-" + fm.name + "-" + fm.version
+	url := baseURL + "/v3/releases/" + fm.Author + "-" + fm.Name + "-" + fm.Version
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		Fatalf("getMetadataForgeModule(): Error while creating GET http request with url " + url + " Error: " + err.Error())
@@ -301,7 +302,7 @@ func getMetadataForgeModule(fm ForgeModule) ForgeModule {
 	syncForgeTime += duration
 	mutex.Unlock()
 	if err != nil {
-		Fatalf("getMetadataForgeModule(): Error while querying metadata for Forge module " + fm.name + " from " + url + ": " + err.Error())
+		Fatalf("getMetadataForgeModule(): Error while querying metadata for Forge module " + fm.Name + " from " + url + ": " + err.Error())
 	}
 	defer resp.Body.Close()
 
@@ -309,7 +310,7 @@ func getMetadataForgeModule(fm ForgeModule) ForgeModule {
 		body, err := ioutil.ReadAll(resp.Body)
 
 		if err != nil {
-			Fatalf("getMetadataForgeModule(): Error while reading response body for Forge module " + fm.name + " from " + url + ": " + err.Error())
+			Fatalf("getMetadataForgeModule(): Error while reading response body for Forge module " + fm.Name + " from " + url + ": " + err.Error())
 		}
 
 		before := time.Now()
@@ -317,16 +318,16 @@ func getMetadataForgeModule(fm ForgeModule) ForgeModule {
 		duration := time.Since(before).Seconds()
 		modulemd5sum := currentRelease["file_md5"].String()
 		moduleFilesize := currentRelease["file_size"].Int()
-		Debugf("module: " + fm.author + "/" + fm.name + " modulemd5sum: " + modulemd5sum + " moduleFilesize: " + strconv.FormatInt(moduleFilesize, 10))
+		Debugf("module: " + fm.Author + "/" + fm.Name + " modulemd5sum: " + modulemd5sum + " moduleFilesize: " + strconv.FormatInt(moduleFilesize, 10))
 
 		mutex.Lock()
 		forgeJSONParseTime += duration
 		mutex.Unlock()
 
-		return ForgeModule{md5sum: modulemd5sum, fileSize: moduleFilesize}
+		return internal.ForgeModule{Md5sum: modulemd5sum, FileSize: moduleFilesize}
 	}
 	Fatalf("getMetadataForgeModule(): Unexpected response code while GETing " + url + " " + resp.Status)
-	return ForgeModule{}
+	return internal.ForgeModule{} // maybe should return an error here
 }
 
 func extractForgeModule(wgForgeModule *sync.WaitGroup, file *io.PipeReader, fileName string) {
@@ -350,7 +351,7 @@ func extractForgeModule(wgForgeModule *sync.WaitGroup, file *io.PipeReader, file
 	mutex.Unlock()
 }
 
-func downloadForgeModule(name string, version string, fm ForgeModule, retryCount int) {
+func downloadForgeModule(name string, version string, fm internal.ForgeModule, retryCount int) {
 	funcName := funcName()
 	var wgForgeModule sync.WaitGroup
 
@@ -362,8 +363,8 @@ func downloadForgeModule(name string, version string, fm ForgeModule, retryCount
 
 	if !isDir(filepath.Join(config.ForgeCacheDir, name+"-"+version)) {
 		baseURL := config.ForgeBaseURL
-		if len(fm.baseURL) > 0 {
-			baseURL = fm.baseURL
+		if len(fm.BaseURL) > 0 {
+			baseURL = fm.BaseURL
 		}
 		url := baseURL + "/v3/files/" + fileName
 		req, err := http.NewRequest("GET", url, nil)
@@ -426,8 +427,8 @@ func downloadForgeModule(name string, version string, fm ForgeModule, retryCount
 			}()
 		} else if resp.StatusCode == http.StatusNotFound {
 			Fatalf("Received 404 from Forge using URL " + url +
-				"\nCheck if the module name '" + fm.author + "-" + fm.name + "' and version '" + version + "' really exist" +
-				"\nUsed in Puppet environment '" + fm.sourceBranch + "'")
+				"\nCheck if the module name '" + fm.Author + "-" + fm.Name + "' and version '" + version + "' really exist" +
+				"\nUsed in Puppet environment '" + fm.SourceBranch + "'")
 		} else {
 			Fatalf("Unexpected response code while GETing " + url + " " + resp.Status)
 		}
@@ -436,8 +437,8 @@ func downloadForgeModule(name string, version string, fm ForgeModule, retryCount
 	}
 	wgForgeModule.Wait()
 
-	if checkSum || fm.sha256sum != "" {
-		fm.version = version
+	if checkSum || fm.Sha256sum != "" {
+		fm.Version = version
 		if doForgeModuleIntegrityCheck(fm) {
 			if retryCount == 0 {
 				Fatalf("downloadForgeModule(): giving up for Puppet module " + name + " version: " + version)
@@ -453,7 +454,7 @@ func downloadForgeModule(name string, version string, fm ForgeModule, retryCount
 }
 
 // readModuleMetadata returns the Forgemodule struct of the given module file path
-func readModuleMetadata(file string) ForgeModule {
+func readModuleMetadata(file string) internal.ForgeModule {
 	content, _ := ioutil.ReadFile(file)
 
 	before := time.Now()
@@ -474,10 +475,10 @@ func readModuleMetadata(file string) ForgeModule {
 		Debugf("Error: Something went wrong while decoding file " + file + " searching for the module name (found for name: " + name + "), version and author")
 	}
 
-	return ForgeModule{name: moduleName, version: version, author: strings.ToLower(author)}
+	return internal.ForgeModule{Name: moduleName, Version: version, Author: strings.ToLower(author)}
 }
 
-func resolveForgeModules(modules map[string]ForgeModule) {
+func resolveForgeModules(modules map[string]internal.ForgeModule) {
 	defer timeTrack(time.Now(), funcName())
 	if len(modules) <= 0 {
 		Debugf("empty ForgeModule[] found, skipping...")
@@ -519,7 +520,7 @@ func resolveForgeModules(modules map[string]ForgeModule) {
 	wg.Add(len(modules))
 
 	for m, fm := range modules {
-		go func(m string, fm ForgeModule, bar *uiprogress.Bar) {
+		go func(m string, fm internal.ForgeModule, bar *uiprogress.Bar) {
 			// Try to receive from the concurrentGoroutines channel. When we have something,
 			// it means we can start a new goroutine because another one finished.
 			// Otherwise, it will block the execution until an execution
@@ -527,7 +528,7 @@ func resolveForgeModules(modules map[string]ForgeModule) {
 			<-concurrentGoroutines
 			defer bar.Incr()
 			defer wg.Done()
-			Debugf("resolveForgeModules(): Trying to get forge module " + m + " with Forge base url " + fm.baseURL + " and CacheTtl set to " + fm.cacheTTL.String())
+			Debugf("resolveForgeModules(): Trying to get forge module " + m + " with Forge base url " + fm.BaseURL + " and CacheTtl set to " + fm.CacheTTL.String())
 			doModuleInstallOrNothing(fm)
 			done <- true
 		}(m, fm, bar)
@@ -546,18 +547,18 @@ func check4ForgeUpdate(moduleName string, currentVersion string, latestVersion s
 	}
 }
 
-func doForgeModuleIntegrityCheck(m ForgeModule) bool {
+func doForgeModuleIntegrityCheck(m internal.ForgeModule) bool {
 	funcName := funcName()
 	var wgCheckSum sync.WaitGroup
 
 	wgCheckSum.Add(1)
-	fmm := ForgeModule{}
-	go func(m ForgeModule) {
+	fmm := internal.ForgeModule{}
+	go func(m internal.ForgeModule) {
 		defer wgCheckSum.Done()
 		fmm = getMetadataForgeModule(m)
-		Debugf(funcName + "(): target md5 hash sum: " + fmm.md5sum)
-		if m.sha256sum != "" {
-			Debugf(funcName + "(): target sha256 hash sum from Puppetfile: " + m.sha256sum)
+		Debugf(funcName + "(): target md5 hash sum: " + fmm.Md5sum)
+		if m.Sha256sum != "" {
+			Debugf(funcName + "(): target sha256 hash sum from Puppetfile: " + m.Sha256sum)
 		}
 	}(m)
 
@@ -568,7 +569,7 @@ func doForgeModuleIntegrityCheck(m ForgeModule) bool {
 	md5R, md5W := io.Pipe()
 	sha256R, sha256W := io.Pipe()
 	var calculatedArchiveSize int64
-	fileName := filepath.Join(config.ForgeCacheDir, m.author+"-"+m.name+"-"+m.version+".tar.gz")
+	fileName := filepath.Join(config.ForgeCacheDir, m.Author+"-"+m.Name+"-"+m.Version+".tar.gz")
 
 	// md5 sum
 	wgCheckSum.Add(1)
@@ -585,7 +586,7 @@ func doForgeModuleIntegrityCheck(m ForgeModule) bool {
 		Debugf(funcName + "(): calculated md5 hash sum: " + calculatedMd5Sum)
 	}(md5R)
 
-	if m.sha256sum != "" {
+	if m.Sha256sum != "" {
 		// sha256 sum
 		wgCheckSum.Add(1)
 		go func(sha256R *io.PipeReader) {
@@ -610,12 +611,12 @@ func doForgeModuleIntegrityCheck(m ForgeModule) bool {
 		// the PipeWriters to propagate the EOF to all
 		// PipeReaders to avoid deadlock
 		defer md5W.Close()
-		if m.sha256sum != "" {
+		if m.Sha256sum != "" {
 			defer sha256W.Close()
 		}
 
 		var mw io.Writer
-		if m.sha256sum != "" {
+		if m.Sha256sum != "" {
 			// build the multiwriter for all the pipes
 			mw = io.MultiWriter(md5W, sha256W)
 		} else {
@@ -646,81 +647,81 @@ func doForgeModuleIntegrityCheck(m ForgeModule) bool {
 
 	wgCheckSum.Wait()
 
-	if fmm.md5sum != calculatedMd5Sum {
-		Warnf("WARNING: calculated md5sum " + calculatedMd5Sum + " for " + fileName + " does not match expected md5sum " + fmm.md5sum)
+	if fmm.Md5sum != calculatedMd5Sum {
+		Warnf("WARNING: calculated md5sum " + calculatedMd5Sum + " for " + fileName + " does not match expected md5sum " + fmm.Md5sum)
 		return true
 	}
-	if m.sha256sum != calculatedSha256Sum {
-		Warnf("WARNING: calculated sha256sum " + calculatedSha256Sum + " for " + fileName + " does not match expected sha256sum " + m.sha256sum)
+	if m.Sha256sum != calculatedSha256Sum {
+		Warnf("WARNING: calculated sha256sum " + calculatedSha256Sum + " for " + fileName + " does not match expected sha256sum " + m.Sha256sum)
 		return true
 	}
-	if fmm.fileSize != calculatedArchiveSize {
-		Warnf("WARNING: calculated file size " + strconv.FormatInt(calculatedArchiveSize, 10) + " for " + fileName + " does not match expected file size " + strconv.FormatInt(fmm.fileSize, 10))
+	if fmm.FileSize != calculatedArchiveSize {
+		Warnf("WARNING: calculated file size " + strconv.FormatInt(calculatedArchiveSize, 10) + " for " + fileName + " does not match expected file size " + strconv.FormatInt(fmm.FileSize, 10))
 		return true
 	}
-	Debugf("calculated file size " + strconv.FormatInt(calculatedArchiveSize, 10) + " for " + fileName + " does match expected file size " + strconv.FormatInt(fmm.fileSize, 10))
-	Debugf("calculated md5sum " + calculatedMd5Sum + " for " + fileName + " does match expected md5sum " + fmm.md5sum)
-	if m.sha256sum != "" {
-		Debugf("calculated sha256sum " + calculatedSha256Sum + " for " + fileName + " does match expected sha256sum " + m.sha256sum)
+	Debugf("calculated file size " + strconv.FormatInt(calculatedArchiveSize, 10) + " for " + fileName + " does match expected file size " + strconv.FormatInt(fmm.FileSize, 10))
+	Debugf("calculated md5sum " + calculatedMd5Sum + " for " + fileName + " does match expected md5sum " + fmm.Md5sum)
+	if m.Sha256sum != "" {
+		Debugf("calculated sha256sum " + calculatedSha256Sum + " for " + fileName + " does match expected sha256sum " + m.Sha256sum)
 	}
 	return false
 
 }
 
-func syncForgeToModuleDir(name string, m ForgeModule, moduleDir string, correspondingPuppetEnvironment string) {
+func syncForgeToModuleDir(name string, m internal.ForgeModule, moduleDir string, correspondingPuppetEnvironment string) {
 	funcName := funcName()
 	mutex.Lock()
 	syncForgeCount++
 	mutex.Unlock()
-	moduleName := m.author + "-" + m.name
+	moduleName := m.Author + "-" + m.Name
 	//Debugf("m.name " + m.name + " m.version " + m.version + " moduleName " + moduleName)
-	targetDir := filepath.Join(moduleDir, m.name)
+	targetDir := filepath.Join(moduleDir, m.Name)
 	metadataFile := filepath.Join(targetDir, "metadata.json")
-	if m.version == "present" {
+	if m.Version == "present" {
 		if fileExists(metadataFile) {
 			Debugf("Nothing to do, found existing Forge module: " + targetDir)
 			if check4update {
 				me := readModuleMetadata(metadataFile)
 				latestForgeModules.RLock()
-				check4ForgeUpdate(m.name, me.version, latestForgeModules.m[moduleName])
+				check4ForgeUpdate(m.Name, me.Version, latestForgeModules.m[moduleName])
 				latestForgeModules.RUnlock()
 			}
 			return
 		}
 		// safe to do, because we ensured in doModuleInstallOrNothing() that -latest exists
-		m.version = "latest"
+		m.Version = "latest"
 
 	}
 	if isDir(targetDir) {
 		if fileExists(metadataFile) {
 			me := readModuleMetadata(metadataFile)
-			if m.version == "latest" {
+			if m.Version == "latest" {
 				//fmt.Println(latestForgeModules)
 				//fmt.Println("checking latestForgeModules for key", moduleName)
 				latestForgeModules.RLock()
 				if _, ok := latestForgeModules.m[moduleName]; ok {
-					Debugf("using version " + latestForgeModules.m[moduleName] + " for " + moduleName + "-" + m.version)
-					m.version = latestForgeModules.m[moduleName]
+					Debugf("using version " + latestForgeModules.m[moduleName] + " for " + moduleName + "-" + m.Version)
+					m.Version = latestForgeModules.m[moduleName]
 				}
 				latestForgeModules.RUnlock()
 			}
 			if check4update {
 				latestForgeModules.RLock()
-				check4ForgeUpdate(m.name, me.version, latestForgeModules.m[moduleName])
+				check4ForgeUpdate(m.Name, me.Version, latestForgeModules.m[moduleName])
 				latestForgeModules.RUnlock()
 			}
-			if me.version == m.version {
-				Debugf("Nothing to do, existing Forge module: " + targetDir + " has the same version " + me.version + " as the to be synced version: " + m.version)
+			if me.Version == m.Version {
+				Debugf("Nothing to do, existing Forge module: " + targetDir + " has the same version " + me.Version + " as the to be synced version: " + m.Version)
 				return
 			}
-			Infof("Need to sync, because existing Forge module: " + targetDir + " has version " + me.version + " and the to be synced version is: " + m.version)
-			createOrPurgeDir(targetDir, "targetDir for module "+me.name)
+			Infof("Need to sync, because existing Forge module: " + targetDir + " has version " + me.Version + " and the to be synced version is: " + m.Version)
+			createOrPurgeDir(targetDir, "targetDir for module "+me.Name)
 		} else {
 			Debugf("Need to purge " + targetDir + ", because it exists without a metadata.json. This shouldn't happen!")
-			createOrPurgeDir(targetDir, "targetDir for module "+m.name+" with missing metadata.json")
+			createOrPurgeDir(targetDir, "targetDir for module "+m.Name+" with missing metadata.json")
 		}
 	}
-	workDir := normalizeDir(filepath.Join(config.ForgeCacheDir, moduleName+"-"+m.version))
+	workDir := normalizeDir(filepath.Join(config.ForgeCacheDir, moduleName+"-"+m.Version))
 	resolvedWorkDir, err := filepath.EvalSymlinks(workDir)
 	if err != nil {
 		Fatalf(funcName + "(): Failed to resolve possible symlink " + workDir + " Error: " + err.Error())
@@ -818,17 +819,17 @@ func syncForgeToModuleDir(name string, m ForgeModule, moduleDir string, correspo
 }
 
 // getLatestCachedModule returns the most recent version of the module that is requested
-func getLatestCachedModule(m ForgeModule) string {
+func getLatestCachedModule(m internal.ForgeModule) string {
 	latest := "//"
 	version := "latest"
-	latestDir := filepath.Join(config.ForgeCacheDir, m.author+"-"+m.name+"-latest")
+	latestDir := filepath.Join(config.ForgeCacheDir, m.Author+"-"+m.Name+"-latest")
 	if !isDir(latestDir) {
 
-		globPath := filepath.Join(config.ForgeCacheDir, m.author+"-"+m.name+"-*")
+		globPath := filepath.Join(config.ForgeCacheDir, m.Author+"-"+m.Name+"-*")
 		Debugf("Glob'ing with path " + globPath)
 		matches, err := filepath.Glob(globPath)
 		if len(matches) == 0 {
-			Fatalf("Could not find any cached version for Forge module " + m.author + "-" + m.name)
+			Fatalf("Could not find any cached version for Forge module " + m.Author + "-" + m.Name)
 		}
 		Debugf("found potential module versions:" + strings.Join(matches, " "))
 		if err != nil {
@@ -853,27 +854,27 @@ func getLatestCachedModule(m ForgeModule) string {
 		if err := os.Symlink(absolutePath, latestDir); err != nil {
 			Fatalf("Error while creating symlink " + latestDir + " pointing to " + absolutePath + err.Error())
 		}
-		version = strings.Split(latest, m.author+"-"+m.name+"-")[1]
+		version = strings.Split(latest, m.Author+"-"+m.Name+"-")[1]
 	} else {
 		versionDir, err := os.Readlink(latestDir)
 		if err != nil {
 			Fatalf("Error while reading symlink " + latestDir + " " + err.Error())
 		}
 
-		version = strings.Split(versionDir, m.author+"-"+m.name+"-")[1]
-		latest = filepath.Join(config.ForgeCacheDir, m.author+"-"+m.name+"-"+version)
+		version = strings.Split(versionDir, m.Author+"-"+m.Name+"-")[1]
+		latest = filepath.Join(config.ForgeCacheDir, m.Author+"-"+m.Name+"-"+version)
 	}
 
 	if latest == "//" {
-		Fatalf("Found no usable cache for module " + m.author + "-" + m.name)
+		Fatalf("Found no usable cache for module " + m.Author + "-" + m.Name)
 	}
 
 	//fmt.Println("version: ", version)
 	latestForgeModules.Lock()
-	latestForgeModules.m[m.author+"-"+m.name] = version
+	latestForgeModules.m[m.Author+"-"+m.Name] = version
 	latestForgeModules.Unlock()
 
-	Warnf("Using cached version " + version + " for " + m.author + "-" + m.name + "-latest")
+	Warnf("Using cached version " + version + " for " + m.Author + "-" + m.Name + "-latest")
 
 	return latest
 }

@@ -10,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/xorpaul/g10k/internal"
+	"github.com/xorpaul/g10k/pkg/puppetfile"
 )
 
 var (
@@ -54,7 +57,7 @@ var (
 	metadataJSONParseTime        float64
 	buildtime                    string
 	buildversion                 string
-	uniqueForgeModules           map[string]ForgeModule
+	uniqueForgeModules           map[string]internal.ForgeModule
 	latestForgeModules           LatestForgeModules
 	maxworker                    int
 	maxExtractworker             int
@@ -138,54 +141,6 @@ type Source struct {
 	StripComponent              string `yaml:"strip_component"`
 }
 
-// Puppetfile contains the key value pairs from the Puppetfile
-type Puppetfile struct {
-	forgeBaseURL      string
-	forgeCacheTTL     time.Duration
-	forgeModules      map[string]ForgeModule
-	gitModules        map[string]GitModule
-	privateKey        string
-	source            string
-	sourceBranch      string
-	workDir           string
-	gitDir            string
-	gitURL            string
-	moduleDirs        []string
-	controlRepoBranch string
-}
-
-// ForgeModule contains information (Version, Name, Author, md5 checksum, file size of the tar.gz archive, Forge BaseURL if custom) about a Puppetlabs Forge module
-type ForgeModule struct {
-	version      string
-	name         string
-	author       string
-	md5sum       string
-	fileSize     int64
-	baseURL      string
-	cacheTTL     time.Duration
-	sha256sum    string
-	moduleDir    string
-	sourceBranch string
-}
-
-// GitModule contains information about a Git Puppet module
-type GitModule struct {
-	privateKey        string
-	git               string
-	branch            string
-	tag               string
-	commit            string
-	ref               string
-	tree              string
-	link              bool
-	ignoreUnreachable bool
-	fallback          []string
-	installPath       string
-	local             bool
-	moduleDir         string
-	useSSHAgent       bool
-}
-
 // ForgeResult is returned by queryForgeAPI and contains if and which version of the Puppetlabs Forge module needs to be downloaded
 type ForgeResult struct {
 	needToGet     bool
@@ -215,7 +170,7 @@ type DeployResult struct {
 func init() {
 	// initialize global maps
 	needSyncEnvs = make(map[string]struct{})
-	uniqueForgeModules = make(map[string]ForgeModule)
+	uniqueForgeModules = make(map[string]internal.ForgeModule)
 }
 
 func main() {
@@ -320,10 +275,10 @@ func main() {
 				config.CloneGitModules = true
 			}
 			target = pfLocation
-			puppetfile := readPuppetfile(target, "", "cmdlineparam", "cmdlineparam", false, false)
-			puppetfile.workDir = ""
-			pfm := make(map[string]Puppetfile)
-			pfm["cmdlineparam"] = puppetfile
+			pf := readPuppetfile(target, "", "cmdlineparam", "cmdlineparam", false, false)
+			pf.WorkDir = ""
+			pfm := make(map[string]puppetfile.Puppetfile)
+			pfm["cmdlineparam"] = pf
 			resolvePuppetfile(pfm)
 		} else {
 			Fatalf("Error: you need to specify at least a config file or use the Puppetfile mode\nExample call: " + os.Args[0] + " -config test.yaml or " + os.Args[0] + " -puppetfile\n")

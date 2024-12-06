@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/xorpaul/g10k/internal"
+	"github.com/xorpaul/g10k/pkg/puppetfile"
 )
 
 func removeTimestampsFromDeployfile(file string) {
@@ -36,16 +38,16 @@ func removeTimestampsFromDeployfile(file string) {
 }
 
 func TestForgeChecksum(t *testing.T) {
-	expectedFmm := ForgeModule{md5sum: "8a8c741978e578921e489774f05e9a65", fileSize: 57358}
-	fmm := getMetadataForgeModule(ForgeModule{version: "2.2.0", name: "apt",
-		author: "puppetlabs", baseURL: "https://forgeapi.puppet.com"})
+	expectedFmm := internal.ForgeModule{Md5sum: "8a8c741978e578921e489774f05e9a65", FileSize: 57358}
+	fmm := getMetadataForgeModule(internal.ForgeModule{Version: "2.2.0", Name: "apt",
+		Author: "puppetlabs", BaseURL: "https://forgeapi.puppet.com"})
 
-	if fmm.md5sum != expectedFmm.md5sum {
-		t.Error("Expected md5sum", expectedFmm.md5sum, "got", fmm.md5sum)
+	if fmm.Md5sum != expectedFmm.Md5sum {
+		t.Error("Expected md5sum", expectedFmm.Md5sum, "got", fmm.Md5sum)
 	}
 
-	if fmm.fileSize != expectedFmm.fileSize {
-		t.Error("Expected fileSize", expectedFmm.fileSize, "got", fmm.fileSize)
+	if fmm.FileSize != expectedFmm.FileSize {
+		t.Error("Expected fileSize", expectedFmm.FileSize, "got", fmm.FileSize)
 	}
 }
 
@@ -410,31 +412,31 @@ func TestInvalidFilesizeForgemodule(t *testing.T) {
 	ts := spinUpFakeForge(t, "tests/fake-forge/invalid-filesize-puppetlabs-ntp-metadata.json")
 	defer ts.Close()
 
-	f := ForgeModule{version: "6.0.0", name: "ntp", author: "puppetlabs",
-		baseURL: ts.URL, sha256sum: "59adaf8c4ab90ab629abcd8e965b6bdd28a022cf408e4e74b7294b47ce11644a"}
-	fm := make(map[string]ForgeModule)
+	f := internal.ForgeModule{Version: "6.0.0", Name: "ntp", Author: "puppetlabs",
+		BaseURL: ts.URL, Sha256sum: "59adaf8c4ab90ab629abcd8e965b6bdd28a022cf408e4e74b7294b47ce11644a"}
+	fm := make(map[string]internal.ForgeModule)
 	fm["puppetlabs/ntp"] = f
 	fmm := getMetadataForgeModule(fm["puppetlabs/ntp"])
-	expectedFmm := ForgeModule{md5sum: "ccee7dd0c564de1c586be58dcf7626a5",
-		fileSize: 1337}
+	expectedFmm := internal.ForgeModule{Md5sum: "ccee7dd0c564de1c586be58dcf7626a5",
+		FileSize: 1337}
 
-	if fmm.md5sum != expectedFmm.md5sum {
-		t.Error("Expected md5sum", expectedFmm.md5sum, "got", fmm.md5sum)
+	if fmm.Md5sum != expectedFmm.Md5sum {
+		t.Error("Expected md5sum", expectedFmm.Md5sum, "got", fmm.Md5sum)
 	}
 
-	if fmm.fileSize != expectedFmm.fileSize {
-		t.Error("Expected fileSize", expectedFmm.fileSize, "got", fmm.fileSize)
+	if fmm.FileSize != expectedFmm.FileSize {
+		t.Error("Expected fileSize", expectedFmm.FileSize, "got", fmm.FileSize)
 	}
 
 	// fake Puppetlabs Forge looks good, continuing...
 	fm["puppetlabs/ntp"] = f
-	pf := Puppetfile{forgeModules: fm, source: "test",
-		forgeBaseURL: f.baseURL, workDir: "/tmp/test_test"}
-	pfm := make(map[string]Puppetfile)
+	pf := puppetfile.Puppetfile{ForgeModules: fm, Source: "test",
+		ForgeBaseURL: f.BaseURL, WorkDir: "/tmp/test_test"}
+	pfm := make(map[string]puppetfile.Puppetfile)
 	pfm["test"] = pf
 
 	config = ConfigSettings{ForgeCacheDir: "/tmp/forge_cache", Maxworker: 500}
-	defer purgeDir(pf.workDir, "TestInvalidMetadataForgemodule")
+	defer purgeDir(pf.WorkDir, "TestInvalidMetadataForgemodule")
 	defer purgeDir(config.ForgeCacheDir, "TestInvalidMetadataForgemodule")
 
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
@@ -464,31 +466,31 @@ func TestInvalidFilesizeForgemodule(t *testing.T) {
 func TestInvalidMd5sumForgemodule(t *testing.T) {
 	ts := spinUpFakeForge(t, "tests/fake-forge/invalid-md5sum-puppetlabs-ntp-metadata.json")
 	defer ts.Close()
-	f := ForgeModule{version: "6.0.0", name: "ntp", author: "puppetlabs",
-		baseURL: ts.URL, sha256sum: "a988a172a3edde6ac2a26d0e893faa88d37bc47465afc50d55225a036906c944"}
-	fm := make(map[string]ForgeModule)
+	f := internal.ForgeModule{Version: "6.0.0", Name: "ntp", Author: "puppetlabs",
+		BaseURL: ts.URL, Sha256sum: "a988a172a3edde6ac2a26d0e893faa88d37bc47465afc50d55225a036906c944"}
+	fm := make(map[string]internal.ForgeModule)
 	fm["puppetlabs/ntp"] = f
 	fmm := getMetadataForgeModule(fm["puppetlabs/ntp"])
-	expectedFmm := ForgeModule{md5sum: "fakeMd5SumToCheckIfIntegrityCheckWorksAsExpected",
-		fileSize: 760}
+	expectedFmm := internal.ForgeModule{Md5sum: "fakeMd5SumToCheckIfIntegrityCheckWorksAsExpected",
+		FileSize: 760}
 
-	if fmm.md5sum != expectedFmm.md5sum {
-		t.Error("Expected md5sum", expectedFmm.md5sum, "got", fmm.md5sum)
+	if fmm.Md5sum != expectedFmm.Md5sum {
+		t.Error("Expected md5sum", expectedFmm.Md5sum, "got", fmm.Md5sum)
 	}
 
-	if fmm.fileSize != expectedFmm.fileSize {
-		t.Error("Expected fileSize", expectedFmm.fileSize, "got", fmm.fileSize)
+	if fmm.FileSize != expectedFmm.FileSize {
+		t.Error("Expected fileSize", expectedFmm.FileSize, "got", fmm.FileSize)
 	}
 
 	// fake Puppetlabs Forge looks good, continuing...
 	fm["puppetlabs/ntp"] = f
-	pf := Puppetfile{forgeModules: fm, source: "test",
-		forgeBaseURL: f.baseURL, workDir: "/tmp/test_test"}
-	pfm := make(map[string]Puppetfile)
+	pf := puppetfile.Puppetfile{ForgeModules: fm, Source: "test",
+		ForgeBaseURL: f.BaseURL, WorkDir: "/tmp/test_test"}
+	pfm := make(map[string]puppetfile.Puppetfile)
 	pfm["test"] = pf
 
 	config = ConfigSettings{ForgeCacheDir: "/tmp/forge_cache", Maxworker: 500}
-	defer purgeDir(pf.workDir, "TestInvalidMd5sumForgemodule")
+	defer purgeDir(pf.WorkDir, "TestInvalidMd5sumForgemodule")
 	defer purgeDir(config.ForgeCacheDir, "TestInvalidMd5sumForgemodule")
 
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
@@ -511,31 +513,31 @@ func TestInvalidMd5sumForgemodule(t *testing.T) {
 func TestInvalidSha256sumForgemodule(t *testing.T) {
 	ts := spinUpFakeForge(t, "tests/fake-forge/invalid-sha256sum-puppetlabs-ntp-metadata.json")
 	defer ts.Close()
-	f := ForgeModule{version: "6.0.0", name: "ntp", author: "puppetlabs",
-		baseURL: ts.URL, sha256sum: "a988a172a3edde6ac2a26d0e893faa88d37bc47465afc50d55225a036906c944"}
-	fm := make(map[string]ForgeModule)
+	f := internal.ForgeModule{Version: "6.0.0", Name: "ntp", Author: "puppetlabs",
+		BaseURL: ts.URL, Sha256sum: "a988a172a3edde6ac2a26d0e893faa88d37bc47465afc50d55225a036906c944"}
+	fm := make(map[string]internal.ForgeModule)
 	fm["puppetlabs/ntp"] = f
 	fmm := getMetadataForgeModule(fm["puppetlabs/ntp"])
-	expectedFmm := ForgeModule{md5sum: "ccee7dd0c564de1c586be58dcf7626a5",
-		fileSize: 760}
+	expectedFmm := internal.ForgeModule{Md5sum: "ccee7dd0c564de1c586be58dcf7626a5",
+		FileSize: 760}
 
-	if fmm.md5sum != expectedFmm.md5sum {
-		t.Error("Expected md5sum", expectedFmm.md5sum, "got", fmm.md5sum)
+	if fmm.Md5sum != expectedFmm.Md5sum {
+		t.Error("Expected md5sum", expectedFmm.Md5sum, "got", fmm.Md5sum)
 	}
 
-	if fmm.fileSize != expectedFmm.fileSize {
-		t.Error("Expected fileSize", expectedFmm.fileSize, "got", fmm.fileSize)
+	if fmm.FileSize != expectedFmm.FileSize {
+		t.Error("Expected fileSize", expectedFmm.FileSize, "got", fmm.FileSize)
 	}
 
 	// fake Puppetlabs Forge looks good, continuing...
 	fm["puppetlabs/ntp"] = f
-	pf := Puppetfile{forgeModules: fm, source: "test",
-		forgeBaseURL: f.baseURL, workDir: "/tmp/test_test"}
-	pfm := make(map[string]Puppetfile)
+	pf := puppetfile.Puppetfile{ForgeModules: fm, Source: "test",
+		ForgeBaseURL: f.BaseURL, WorkDir: "/tmp/test_test"}
+	pfm := make(map[string]puppetfile.Puppetfile)
 	pfm["test"] = pf
 
 	config = ConfigSettings{ForgeCacheDir: "/tmp/forge_cache", Maxworker: 500}
-	defer purgeDir(pf.workDir, "TestInvalidMetadataForgemodule")
+	defer purgeDir(pf.WorkDir, "TestInvalidMetadataForgemodule")
 	defer purgeDir(config.ForgeCacheDir, "TestInvalidMetadataForgemodule")
 
 	funcName := strings.Split(funcName(), ".")[len(strings.Split(funcName(), "."))-1]
@@ -589,16 +591,16 @@ func spinUpFakeForge(t *testing.T, metadataFile string) *httptest.Server {
 func TestModuleDirOverride(t *testing.T) {
 	got := readPuppetfile("tests/TestReadPuppetfile", "", "test", "test", false, false)
 	//fmt.Println(got.forgeModules["apt"].moduleDir)
-	if got.forgeModules["apt"].moduleDir != "external_modules" {
-		t.Error("Expected 'external_modules' for module dir, but got", got.forgeModules["apt"].moduleDir)
+	if got.ForgeModules["apt"].ModuleDir != "external_modules" {
+		t.Error("Expected 'external_modules' for module dir, but got", got.ForgeModules["apt"].ModuleDir)
 	}
-	if got.gitModules["another_module"].moduleDir != "modules" {
-		t.Error("Expected 'modules' for module dir, but got", got.gitModules["another_module"].moduleDir)
+	if got.GitModules["another_module"].ModuleDir != "modules" {
+		t.Error("Expected 'modules' for module dir, but got", got.GitModules["another_module"].ModuleDir)
 	}
 	moduleDirParam = "foobar"
 	got = readPuppetfile("tests/TestReadPuppetfile", "", "test", "test", false, false)
-	if got.forgeModules["apt"].moduleDir != "foobar" {
-		t.Error("Expected '", moduleDirParam, "' for module dir, but got", got.forgeModules["apt"].moduleDir)
+	if got.ForgeModules["apt"].ModuleDir != "foobar" {
+		t.Error("Expected '", moduleDirParam, "' for module dir, but got", got.ForgeModules["apt"].ModuleDir)
 	}
 	moduleDirParam = ""
 }
@@ -671,8 +673,8 @@ func TestConfigUseCacheFallback(t *testing.T) {
 	}
 
 	// get the module to cache it
-	gm := GitModule{}
-	gm.git = "https://github.com/puppetlabs/puppetlabs-firewall.git"
+	gm := internal.GitModule{}
+	gm.Git = "https://github.com/puppetlabs/puppetlabs-firewall.git"
 	doMirrorOrUpdate(gm, "/tmp/g10k/modules/https-__github.com_puppetlabs_puppetlabs-firewall.git", 0)
 
 	// rename the cached module dir to match the otherwise failing single_fail env
@@ -726,8 +728,8 @@ func TestEnvFullSyncIfModuleWasTemporarilyNotAvailable(t *testing.T) {
 	purgeDir("/tmp/example/"+branchParam, funcName)
 
 	// get the module to cache it
-	gm := GitModule{}
-	gm.git = "https://github.com/puppetlabs/puppetlabs-firewall.git"
+	gm := internal.GitModule{}
+	gm.Git = "https://github.com/puppetlabs/puppetlabs-firewall.git"
 	doMirrorOrUpdate(gm, "/tmp/g10k/modules/https-__github.com_puppetlabs_puppetlabs-firewall.git", 0)
 
 	// change the git remote url to something that does not resolve https://.com/...
@@ -806,8 +808,8 @@ func TestConfigUseCacheFallbackFalse(t *testing.T) {
 	}
 
 	// get the module to cache it
-	gm := GitModule{}
-	gm.git = "https://github.com/puppetlabs/puppetlabs-firewall.git"
+	gm := internal.GitModule{}
+	gm.Git = "https://github.com/puppetlabs/puppetlabs-firewall.git"
 	doMirrorOrUpdate(gm, "/tmp/g10k/modules/https-__github.com_puppetlabs_puppetlabs-firewall.git", 0)
 
 	// rename the cached module dir to match the otherwise failing single_fail env
@@ -857,7 +859,7 @@ func TestReadPuppetfileUseCacheFallback(t *testing.T) {
 		return
 	}
 	purgeDir("/tmp/example", funcName)
-	fm := ForgeModule{version: "1.9.0", author: "puppetlabs", name: "firewall"}
+	fm := internal.ForgeModule{Version: "1.9.0", Author: "puppetlabs", Name: "firewall"}
 	config.ForgeBaseURL = "https://forgeapi.puppet.com"
 	downloadForgeModule("puppetlabs-firewall", "1.9.0", fm, 1)
 
@@ -955,7 +957,7 @@ func TestResolvePuppetfileInstallPath(t *testing.T) {
 
 	metadata := readModuleMetadata(metadataFile)
 	//fmt.Println(metadata)
-	if metadata.version != "2.0.0" {
+	if metadata.Version != "2.0.0" {
 		t.Errorf("terminated with the correct exit code, but the resolved metadata.json is unexpected %s", metadataFile)
 	}
 
@@ -997,7 +999,7 @@ func TestResolvePuppetfileInstallPathTwice(t *testing.T) {
 
 	metadata := readModuleMetadata(metadataFile)
 	//fmt.Println(metadata)
-	if metadata.version != "2.0.0" {
+	if metadata.Version != "2.0.0" {
 		t.Errorf("terminated with the correct exit code, but the resolved metadata.json is unexpected %s", metadataFile)
 	}
 
@@ -1326,8 +1328,8 @@ func TestConfigRetryGitCommands(t *testing.T) {
 	purgeDir(localGitRepoDir, funcName)
 
 	// get the module to cache it
-	gm := GitModule{}
-	gm.git = "https://github.com/puppetlabs/puppetlabs-firewall.git"
+	gm := internal.GitModule{}
+	gm.Git = "https://github.com/puppetlabs/puppetlabs-firewall.git"
 	doMirrorOrUpdate(gm, localGitRepoDir, 0)
 
 	// corrupt the local git module repository
@@ -1753,7 +1755,7 @@ func TestLastCheckedFile(t *testing.T) {
 		t.Errorf("Forge cache file missing: %s", lastCheckedFile)
 	}
 
-	fm := ForgeModule{version: "latest", name: "inifile", author: "puppetlabs", fileSize: 0, cacheTTL: 0}
+	fm := internal.ForgeModule{Version: "latest", Name: "inifile", Author: "puppetlabs", FileSize: 0, CacheTTL: 0}
 	json, _ := ioutil.ReadFile(lastCheckedFile)
 	latestForgeModules.m = make(map[string]string)
 
@@ -1995,8 +1997,8 @@ func TestFailedGit(t *testing.T) {
 
 	// get the module to cache it
 	gitDir := "/tmp/g10k/modules/https-__github.com_puppetlabs_puppetlabs-firewall.git"
-	gm := GitModule{}
-	gm.git = "https://github.com/puppetlabs/puppetlabs-firewall.git"
+	gm := internal.GitModule{}
+	gm.Git = "https://github.com/puppetlabs/puppetlabs-firewall.git"
 	purgeDir(gitDir, funcName)
 	doMirrorOrUpdate(gm, gitDir, 0)
 

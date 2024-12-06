@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/remeh/sizedwaitgroup"
+	"github.com/xorpaul/g10k/internal"
+	"github.com/xorpaul/g10k/pkg/puppetfile"
 	"github.com/xorpaul/uiprogress"
 	"golang.org/x/term"
 )
@@ -31,7 +33,7 @@ func sourceSanityCheck(source string, sa Source) {
 
 func resolvePuppetEnvironment(tags bool, outputNameTag string) {
 	wg := sizedwaitgroup.New(config.MaxExtractworker + 1)
-	allPuppetfiles := make(map[string]Puppetfile)
+	allPuppetfiles := make(map[string]puppetfile.Puppetfile)
 	allEnvironments := make(map[string]bool)
 	allBasedirs := make(map[string]bool)
 	foundMatch := false
@@ -53,9 +55,9 @@ func resolvePuppetEnvironment(tags bool, outputNameTag string) {
 			// check if sa.Basedir exists
 			checkDirAndCreate(sa.Basedir, "basedir")
 
-			controlRepoGit := GitModule{}
-			controlRepoGit.git = sa.Remote
-			controlRepoGit.privateKey = sa.PrivateKey
+			controlRepoGit := internal.GitModule{}
+			controlRepoGit.Git = sa.Remote
+			controlRepoGit.PrivateKey = sa.PrivateKey
 			if success := doMirrorOrUpdate(controlRepoGit, workDir, 0); success {
 
 				// get all branches
@@ -161,8 +163,8 @@ func resolvePuppetEnvironment(tags bool, outputNameTag string) {
 
 							env := strings.Replace(strings.Replace(targetDir, sa.Basedir, "", 1), "/", "", -1)
 							if len(moduleParam) == 0 {
-								gitModule := GitModule{}
-								gitModule.tree = branch
+								gitModule := internal.GitModule{}
+								gitModule.Tree = branch
 								syncToModuleDir(gitModule, workDir, targetDir, env)
 							}
 							pf := filepath.Join(targetDir, "Puppetfile")
@@ -180,13 +182,13 @@ func resolvePuppetEnvironment(tags bool, outputNameTag string) {
 								}
 							} else {
 								puppetfile := readPuppetfile(pf, sa.PrivateKey, source, branch, sa.ForceForgeVersions, false)
-								puppetfile.workDir = normalizeDir(targetDir)
-								puppetfile.controlRepoBranch = branch
-								puppetfile.gitDir = workDir
-								puppetfile.gitURL = sa.Remote
+								puppetfile.WorkDir = normalizeDir(targetDir)
+								puppetfile.ControlRepoBranch = branch
+								puppetfile.GitDir = workDir
+								puppetfile.GitURL = sa.Remote
 								mutex.Lock()
-								for _, moduleDir := range puppetfile.moduleDirs {
-									checkDirAndCreate(filepath.Join(puppetfile.workDir, moduleDir), "moduledir for env")
+								for _, moduleDir := range puppetfile.ModuleDirs {
+									checkDirAndCreate(filepath.Join(puppetfile.WorkDir, moduleDir), "moduledir for env")
 								}
 								allPuppetfiles[env] = puppetfile
 								allBasedirs[sa.Basedir] = true
@@ -237,54 +239,54 @@ func resolveSourcePrefix(source string, sa Source) string {
 	}
 }
 
-func resolvePuppetfile(allPuppetfiles map[string]Puppetfile) {
+func resolvePuppetfile(allPuppetfiles map[string]puppetfile.Puppetfile) {
 	wg := sizedwaitgroup.New(config.MaxExtractworker)
 	exisitingModuleDirs := make(map[string]struct{})
-	uniqueGitModules := make(map[string]GitModule)
+	uniqueGitModules := make(map[string]internal.GitModule)
 	// if we made it this far initialize the global maps
 	latestForgeModules.m = make(map[string]string)
 	for env, pf := range allPuppetfiles {
-		Debugf("Resolving branch " + env + " of source " + pf.source)
+		Debugf("Resolving branch " + env + " of source " + pf.Source)
 		//fmt.Println(pf)
-		for gitName, gitModule := range pf.gitModules {
+		for gitName, gitModule := range pf.GitModules {
 			if len(moduleParam) > 0 {
 				if gitName != moduleParam {
 					Debugf("Skipping git module " + gitName + ", because parameter -module is set to " + moduleParam)
-					delete(pf.gitModules, gitName)
+					delete(pf.GitModules, gitName)
 					continue
 				}
 			}
-			if gitModule.local {
+			if gitModule.Local {
 				continue
 			}
 
-			gitModule.privateKey = pf.privateKey
-			if _, ok := uniqueGitModules[gitModule.git]; !ok {
-				uniqueGitModules[gitModule.git] = gitModule
+			gitModule.PrivateKey = pf.PrivateKey
+			if _, ok := uniqueGitModules[gitModule.Git]; !ok {
+				uniqueGitModules[gitModule.Git] = gitModule
 			}
 		}
-		for forgeModuleName, fm := range pf.forgeModules {
+		for forgeModuleName, fm := range pf.ForgeModules {
 			if len(moduleParam) > 0 {
 				if forgeModuleName != moduleParam {
 					Debugf("Skipping forge module " + forgeModuleName + ", because parameter -module is set to " + moduleParam)
-					delete(pf.forgeModules, forgeModuleName)
+					delete(pf.ForgeModules, forgeModuleName)
 					continue
 				}
 			}
-			fm.baseURL = pf.forgeBaseURL
-			if pf.forgeCacheTTL != 0 {
-				fm.cacheTTL = pf.forgeCacheTTL
+			fm.BaseURL = pf.ForgeBaseURL
+			if pf.ForgeCacheTTL != 0 {
+				fm.CacheTTL = pf.ForgeCacheTTL
 			} else {
-				fm.cacheTTL = config.ForgeCacheTTL
+				fm.CacheTTL = config.ForgeCacheTTL
 			}
 			// fmt.Println("Found Forge module", fm.author, "/", forgeModuleName, "with version", fm.version, "and cacheTTL", fm.cacheTTL)
 			forgeModuleName = strings.Replace(forgeModuleName, "/", "-", -1)
-			uniqueForgeModuleName := fm.author + "/" + forgeModuleName + "-" + fm.version
+			uniqueForgeModuleName := fm.Author + "/" + forgeModuleName + "-" + fm.Version
 			if _, ok := uniqueForgeModules[uniqueForgeModuleName]; !ok {
 				uniqueForgeModules[uniqueForgeModuleName] = fm
 			} else {
 				// Use the shortest Forge cache TTL for this module
-				if uniqueForgeModules[uniqueForgeModuleName].cacheTTL > pf.forgeCacheTTL {
+				if uniqueForgeModules[uniqueForgeModuleName].CacheTTL > pf.ForgeCacheTTL {
 					delete(uniqueForgeModules, uniqueForgeModuleName)
 					uniqueForgeModules[uniqueForgeModuleName] = fm
 				}
@@ -307,15 +309,15 @@ func resolvePuppetfile(allPuppetfiles map[string]Puppetfile) {
 	wgResolve.Wait()
 	//log.Println(config.Sources["cmdlineparam"])
 	for env, pf := range allPuppetfiles {
-		Debugf("Syncing " + env + " with workDir " + pf.workDir)
+		Debugf("Syncing " + env + " with workDir " + pf.WorkDir)
 		// this prevents g10k from purging module directories on the subsequent run in -puppetfile mode
 		basedir := ""
 		if !pfMode {
-			basedir = checkDirAndCreate(pf.workDir, "basedir 2 for source "+pf.source)
+			basedir = checkDirAndCreate(pf.WorkDir, "basedir 2 for source "+pf.Source)
 		}
 
-		for _, moduleDir := range pf.moduleDirs {
-			moduleDir = normalizeDir(filepath.Join(pf.workDir, moduleDir))
+		for _, moduleDir := range pf.ModuleDirs {
+			moduleDir = normalizeDir(filepath.Join(pf.WorkDir, moduleDir))
 			exisitingModuleDirsFI, _ := os.ReadDir(moduleDir)
 			mutex.Lock()
 			for _, exisitingModuleDir := range exisitingModuleDirsFI {
@@ -325,15 +327,15 @@ func resolvePuppetfile(allPuppetfiles map[string]Puppetfile) {
 			mutex.Unlock()
 		}
 
-		for gitName, gitModule := range pf.gitModules {
-			moduleDir := filepath.Join(pf.workDir, gitModule.moduleDir)
+		for gitName, gitModule := range pf.GitModules {
+			moduleDir := filepath.Join(pf.WorkDir, gitModule.ModuleDir)
 			moduleDir = normalizeDir(moduleDir)
-			if gitModule.local {
+			if gitModule.Local {
 				moduleDirectory := filepath.Join(moduleDir, gitName)
 				Debugf("Not deleting " + moduleDirectory + " as it is declared as a local module")
 				// remove this module from the exisitingModuleDirs map
-				if len(gitModule.installPath) > 0 {
-					moduleDirectory = filepath.Join(normalizeDir(basedir), normalizeDir(gitModule.installPath), gitName)
+				if len(gitModule.InstallPath) > 0 {
+					moduleDirectory = filepath.Join(normalizeDir(basedir), normalizeDir(gitModule.InstallPath), gitName)
 				}
 				moduleDirectory = normalizeDir(moduleDirectory)
 				mutex.Lock()
@@ -349,21 +351,21 @@ func resolvePuppetfile(allPuppetfiles map[string]Puppetfile) {
 				continue
 			}
 			wg.Add()
-			go func(gitName string, gitModule GitModule, env string, pf Puppetfile) {
+			go func(gitName string, gitModule internal.GitModule, env string, pf puppetfile.Puppetfile) {
 				defer wg.Done()
 				targetDir := normalizeDir(filepath.Join(moduleDir, gitName))
-				moduleCacheDir := filepath.Join(config.ModulesCacheDir, strings.Replace(strings.Replace(gitModule.git, "/", "_", -1), ":", "-", -1))
+				moduleCacheDir := filepath.Join(config.ModulesCacheDir, strings.Replace(strings.Replace(gitModule.Git, "/", "_", -1), ":", "-", -1))
 				tree := detectDefaultBranch(moduleCacheDir)
-				Debugf("Setting " + tree + " as default branch for " + gitModule.git)
-				if len(gitModule.branch) > 0 {
-					tree = gitModule.branch
-				} else if len(gitModule.commit) > 0 {
-					tree = gitModule.commit
-				} else if len(gitModule.tag) > 0 {
-					tree = gitModule.tag
-				} else if len(gitModule.ref) > 0 {
-					tree = gitModule.ref
-				} else if gitModule.link {
+				Debugf("Setting " + tree + " as default branch for " + gitModule.Git)
+				if len(gitModule.Branch) > 0 {
+					tree = gitModule.Branch
+				} else if len(gitModule.Commit) > 0 {
+					tree = gitModule.Commit
+				} else if len(gitModule.Tag) > 0 {
+					tree = gitModule.Tag
+				} else if len(gitModule.Ref) > 0 {
+					tree = gitModule.Ref
+				} else if gitModule.Link {
 					if pfMode {
 						if len(os.Getenv("g10k_branch")) > 0 {
 							tree = os.Getenv("g10k_branch")
@@ -375,31 +377,31 @@ func resolvePuppetfile(allPuppetfiles map[string]Puppetfile) {
 					} else {
 						// we want only the branch name of the control repo and not the resulting
 						// Puppet environment folder name, which could contain a prefix
-						tree = pf.controlRepoBranch
+						tree = pf.ControlRepoBranch
 					}
 				}
 
-				if len(gitModule.installPath) > 0 {
-					targetDir = filepath.Join(basedir, normalizeDir(gitModule.installPath), gitName)
+				if len(gitModule.InstallPath) > 0 {
+					targetDir = filepath.Join(basedir, normalizeDir(gitModule.InstallPath), gitName)
 				}
 				targetDir = normalizeDir(targetDir)
 				success := false
 
-				if gitModule.link {
+				if gitModule.Link {
 					Debugf("Trying to resolve " + moduleCacheDir + " with branch " + tree)
-					gitModule.tree = tree
+					gitModule.Tree = tree
 					success = syncToModuleDir(gitModule, moduleCacheDir, targetDir, env)
 				}
 
-				if len(gitModule.fallback) > 0 {
+				if len(gitModule.Fallback) > 0 {
 					if !success {
-						for i, fallbackBranch := range gitModule.fallback {
-							if i == len(gitModule.fallback)-1 {
+						for i, fallbackBranch := range gitModule.Fallback {
+							if i == len(gitModule.Fallback)-1 {
 								// last try
-								gitModule.ignoreUnreachable = true
+								gitModule.IgnoreUnreachable = true
 							}
 							Debugf("Trying to resolve " + moduleCacheDir + " with branch " + fallbackBranch)
-							gitModule.tree = fallbackBranch
+							gitModule.Tree = fallbackBranch
 							success = syncToModuleDir(gitModule, moduleCacheDir, targetDir, env)
 							if success {
 								break
@@ -408,17 +410,17 @@ func resolvePuppetfile(allPuppetfiles map[string]Puppetfile) {
 						// possible TODO: shouldn't this fail if all fallback branches fail?
 					}
 				} else {
-					gitModule.tree = tree
+					gitModule.Tree = tree
 					success = syncToModuleDir(gitModule, moduleCacheDir, targetDir, env)
 					if !success && !config.IgnoreUnreachableModules {
-						Fatalf("Failed to resolve git module '" + gitName + "' with repository " + gitModule.git + " and branch/reference '" + tree + "' used in control repository branch '" + pf.sourceBranch + "' or Puppet environment '" + env + "'")
+						Fatalf("Failed to resolve git module '" + gitName + "' with repository " + gitModule.Git + " and branch/reference '" + tree + "' used in control repository branch '" + pf.SourceBranch + "' or Puppet environment '" + env + "'")
 					}
 				}
 
 				// remove this module from the exisitingModuleDirs map
 				moduleDirectory := filepath.Join(moduleDir, gitName)
-				if len(gitModule.installPath) > 0 {
-					moduleDirectory = filepath.Join(normalizeDir(basedir), normalizeDir(gitModule.installPath), gitName)
+				if len(gitModule.InstallPath) > 0 {
+					moduleDirectory = filepath.Join(normalizeDir(basedir), normalizeDir(gitModule.InstallPath), gitName)
 				}
 				moduleDirectory = normalizeDir(moduleDirectory)
 				mutex.Lock()
@@ -433,16 +435,16 @@ func resolvePuppetfile(allPuppetfiles map[string]Puppetfile) {
 				mutex.Unlock()
 			}(gitName, gitModule, env, pf)
 		}
-		for forgeModuleName, fm := range pf.forgeModules {
+		for forgeModuleName, fm := range pf.ForgeModules {
 			wg.Add()
-			moduleDir := filepath.Join(pf.workDir, fm.moduleDir)
+			moduleDir := filepath.Join(pf.WorkDir, fm.ModuleDir)
 			moduleDir = normalizeDir(moduleDir)
-			go func(forgeModuleName string, fm ForgeModule, moduleDir string, env string) {
+			go func(forgeModuleName string, fm internal.ForgeModule, moduleDir string, env string) {
 				defer wg.Done()
 				syncForgeToModuleDir(forgeModuleName, fm, moduleDir, env)
 				// remove this module from the exisitingModuleDirs map
 				mutex.Lock()
-				mDir := filepath.Join(moduleDir, fm.name)
+				mDir := filepath.Join(moduleDir, fm.Name)
 				delete(exisitingModuleDirs, mDir)
 				mutex.Unlock()
 			}(forgeModuleName, fm, moduleDir, env)
@@ -465,15 +467,15 @@ func resolvePuppetfile(allPuppetfiles map[string]Puppetfile) {
 	}
 
 	for _, pf := range allPuppetfiles {
-		deployFile := filepath.Join(pf.workDir, ".g10k-deploy.json")
+		deployFile := filepath.Join(pf.WorkDir, ".g10k-deploy.json")
 		if fileExists(deployFile) {
 			Debugf("Finishing writing to deploy file " + deployFile)
 			dr := readDeployResultFile(deployFile)
 			dr.DeploySuccess = true
 			dr.FinishedAt = time.Now()
-			dr.PuppetfileChecksum = getSha256sumFile(filepath.Join(pf.workDir, "Puppetfile"))
-			dr.GitDir = pf.gitDir
-			dr.GitURL = pf.gitURL
+			dr.PuppetfileChecksum = getSha256sumFile(filepath.Join(pf.WorkDir, "Puppetfile"))
+			dr.GitDir = pf.GitDir
+			dr.GitURL = pf.GitURL
 			writeStructJSONFile(deployFile, dr)
 		}
 	}
